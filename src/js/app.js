@@ -549,11 +549,22 @@ async function rcspProbe() {
     const r = await client.rcspProbe();
     const line = (name, v) =>
       `${name}: ${v?.error ? `error: ${v.error}` : `op=0x${v.opcode.toString(16)} status=0x${(v.status ?? 0).toString(16)} payload=${[...(v.payload || [])].map((b) => b.toString(16).padStart(2, '0')).join(' ')}`}`;
+    const free = (() => {
+      const p = r.free?.payload;
+      if (!p || p.length < 5) return '';
+      const k = ((p[1] << 24) | (p[2] << 16) | (p[3] << 8) | p[4]) >>> 0;
+      return `   = ${k} KiB (${k * 1024} B free)`;
+    })();
+    const watch = (() => {
+      const p = r.current?.payload;
+      if (!p || p.length < 2) return '';
+      return `   = ${JSON.stringify(new TextDecoder().decode(p.slice(1)).replace(/\u0000+$/, ''))}`;
+    })();
     out.textContent = [
       'RCSP auth + info (post-auth)',
       line('GET_TARGET_INFO', r.target),
-      line('external-flash op 12 (free space)', r.free),
-      line('external-flash op 3/0 (current watch)', r.current),
+      line('external-flash op 12 (free space)', r.free) + free,
+      line('external-flash op 3/0 (current watch)', r.current) + watch,
     ].join('\n');
     toast('RCSP probe done — see log', 'ok');
   } catch (e) {
@@ -620,13 +631,7 @@ async function downloadFace(entry, btn) {
   try {
     const { data } = await client.rcspDownload(entry);
     const name = (entry.name || `face_${entry.id.toString(16)}`).replace(/[^\w.-]+/g, '_');
-    const blob = new Blob([data], { type: 'application/octet-stream' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = name;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    saveBlob(data, name);
     btn.textContent = `Saved ${data.length} B`;
     toast(`Downloaded ${name} (${data.length} B)`, 'ok');
     log({ msg: `RCSP download ${name} → ${data.length} B`, level: 'ok' });
@@ -635,6 +640,42 @@ async function downloadFace(entry, btn) {
     btn.disabled = false;
     toast(e.message, 'err');
     log({ msg: `RCSP download: ${e.message}`, level: 'err' });
+  }
+}
+
+function saveBlob(data, name) {
+  const blob = new Blob([data], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+/** Download a stored file by FAT path (cmd 0x24 op=2) — e.g. "/WATCH". */
+async function downloadPath() {
+  if (!client.connected) {
+    toast('Connect a badge first', 'err');
+    return;
+  }
+  const path = ($('#rcspPath').value || '').trim() || '/WATCH';
+  const btn = $('#btnRcspReadPath');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Reading…';
+  try {
+    const { data } = await client.rcspDownloadPath(path);
+    const name = path.replace(/^\/+/, '').replace(/[^\w.-]+/g, '_') || 'file.bin';
+    saveBlob(data, name);
+    toast(`Downloaded ${path} (${data.length} B)`, 'ok');
+    log({ msg: `RCSP read ${path} → ${data.length} B`, level: 'ok' });
+  } catch (e) {
+    toast(e.message, 'err');
+    log({ msg: `RCSP read ${path}: ${e.message}`, level: 'err' });
+  } finally {
+    btn.textContent = label;
+    btn.disabled = false;
   }
 }
 
@@ -827,6 +868,7 @@ function bind() {
   $('#btnDialPresetList').addEventListener('click', () => listPresetDials());
   $('#btnRcspProbe').addEventListener('click', () => rcspProbe());
   $('#btnRcspList').addEventListener('click', () => listFacesRcsp());
+  $('#btnRcspReadPath').addEventListener('click', () => downloadPath());
   $('#btnDialDelete').addEventListener('click', () => deleteDial());
   $('#btnDialSwitch').addEventListener('click', () => switchDial());
   $('#btnMediaList').addEventListener('click', () =>

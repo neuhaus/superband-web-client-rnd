@@ -29,6 +29,7 @@ export const RcspFsCmd = {
   STOP_FILE_BROWSE: 0x0d,
   FILE_METADATA: 0x1b,
   SESSION_CLOSE: 0x1c,
+  READ_FILE_FROM_DEVICE: 0x24,
   SMALL_FILE_OP: 0x28,
   DATA_PUSH: 0x01,
 };
@@ -95,6 +96,22 @@ function bytesEqual(a, b) {
 
 function encPath(path) {
   return new TextEncoder().encode(path || '');
+}
+
+/**
+ * File-name bytes for `StartWithDevAndNameParam`: raw bytes for ASCII names,
+ * else a UTF-16LE string prefixed with "\U" (mirrors the SDK's getNameData).
+ */
+function nameData(name) {
+  let ascii = true;
+  for (const ch of name) if (ch.charCodeAt(0) > 127) ascii = false;
+  if (ascii) return new TextEncoder().encode(name);
+  const out = new Uint8Array(2 + name.length * 2);
+  out[0] = 0x5c; // '\'
+  out[1] = 0x55; // 'U'
+  const dv = new DataView(out.buffer);
+  for (let i = 0; i < name.length; i++) dv.setUint16(2 + i * 2, name.charCodeAt(i), true);
+  return out;
 }
 
 /**
@@ -524,5 +541,73 @@ export class RcspSession {
       if (offset >= maxBytes) break;
     }
     return concat(...parts);
+  }
+
+  // ── File read (ReadFileFromDevice, cmd 0x24) ─────────────────────────────
+  //
+  // The SDK's GetFileTask uses this for the watch-resource "open file" flow:
+  // a start command (op 1 = by cluster, op 2 = by dev+name), then the device
+  // streams the file as DataCmd (cmd 0x01, xm=0x24) pushes, then a stop cmd.
+  // Reading by name needs no prior browse.
+
+  async _readStream(startParam, { timeoutMs = 20000, onProgress = null } = {}) {
+    if (!this.authDone) throw new Error('RCSP: not authenticated');
+    await this._sendFrame(RcspFsCmd.READ_FILE_FROM_DEVICE, startParam, { type: 1, hasResponse: 1 });
+    let size = null;
+    const parts = [];
+    let received = 0;
+    for (;;) {
+      const pkt = await this._waitFrame(timeoutMs);
+      if (pkt.type === 0 && pkt.opcode === RcspFsCmd.READ_FILE_FROM_DEVICE) {
+        if (pkt.status !== 0) throw new Error(`read rejected (status 0x${pkt.status.toString(16)})`);
+        if (pkt.payload.length >= 5) {
+          size = ((pkt.payload[1] << 24) | (pkt.payload[2] << 16) | (pkt.payload[3] << 8) | pkt.payload[4]) >>> 0;
+        }
+        continue;
+      }
+      if (pkt.type === 1 && pkt.opcode === RcspFsCmd.DATA_PUSH && pkt.xmOpCode === RcspFsCmd.READ_FILE_FROM_DEVICE) {
+        parts.push(pkt.payload);
+        received += pkt.payload.length;
+        if (onProgress) onProgress(received, size);
+        await this._sendFrame(RcspFsCmd.DATA_PUSH, new Uint8Array(0), {
+          type: 0,
+          status: 0,
+          sn: pkt.sn,
+          xmOpCode: RcspFsCmd.READ_FILE_FROM_DEVICE,
+        });
+        continue;
+      }
+      if (pkt.type === 1 && pkt.opcode === RcspFsCmd.READ_FILE_FROM_DEVICE) {
+        // Stop (op 0x80) — ACK and finish.
+        await this._sendFrame(RcspFsCmd.READ_FILE_FROM_DEVICE, new Uint8Array(0), {
+          type: 0,
+          status: 0,
+          sn: pkt.sn,
+        });
+        break;
+      }
+      // ignore anything else
+    }
+    return { data: concat(...parts), size };
+  }
+
+  /**
+   * Read a file by name (SDK `StartWithDevAndNameParam`, op=2).
+   * @param {string} name e.g. "/WATCH"
+   * @param {{devHandler?:number, offset?:number, timeoutMs?:number, onProgress?:Function}} [opts]
+   */
+  async readByName(name, { devHandler = DeviceHandler.FLASH, offset = 0, timeoutMs = 20000, onProgress = null } = {}) {
+    const nd = nameData(name);
+    const param = concat(u8(0x02), u32be(devHandler), u32be(offset), u8(nd.length), nd);
+    return this._readStream(param, { timeoutMs, onProgress });
+  }
+
+  /**
+   * Read a file by cluster (SDK `StartWithClusterParam`, op=1) — cluster comes from browse.
+   * @param {number} cluster
+   */
+  async readByCluster(cluster, { devHandler = DeviceHandler.FLASH, offset = 0, timeoutMs = 20000, onProgress = null } = {}) {
+    const param = concat(u8(0x01), u32be(devHandler), u32be(offset), u32be(cluster));
+    return this._readStream(param, { timeoutMs, onProgress });
   }
 }

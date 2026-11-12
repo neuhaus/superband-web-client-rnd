@@ -708,6 +708,17 @@ class BadgeSession {
     }
   }
 
+  /** Download a stored file by path/name over RCSP (authenticated, cmd 0x24 op=2). */
+  async rcspDownloadPath(path, { onProgress = null } = {}) {
+    const session = await this._openRcsp({ timeoutMs: 20000 });
+    try {
+      const { data, size } = await session.readByName(path, { onProgress });
+      return { path, data, size };
+    } finally {
+      session.stop();
+    }
+  }
+
   async transferFile(
     fileBytes,
     {
@@ -1362,6 +1373,10 @@ export class SuperBandClient extends EventTarget {
 
   async rcspDownload(entry, opts) {
     return this._requireActive().rcspDownload(entry, opts);
+  }
+
+  async rcspDownloadPath(path, opts) {
+    return this._requireActive().rcspDownloadPath(path, opts);
   }
 
   async transferFile(fileBytes, opts) {
