@@ -871,6 +871,29 @@ input[type='number'] {
   display: none;
 }
 
+/* —— Empty state (no badge connected) —— */
+.empty-state {
+  background: var(--panel);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  padding: 1.4rem 1.3rem;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.empty-state h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.empty-state .lead {
+  margin: 0 auto;
+  max-width: 44ch;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 /* —— Faces panel —— */
 .cards {
   display: grid;

@@ -25,10 +25,12 @@ function setPill(el, text, state = '') {
 }
 
 function syncProtocolUi() {
-  // Baji-only controls are dead weight (and confusing) on a FitPro dial badge.
+  // Baji-only controls are dead weight (and confusing) on a FitPro dial badge,
+  // and device controls stay hidden until a badge is connected.
+  const on = client.sessionCount > 0 && client.connected;
   const isFitPro = client.getSnapshot?.().protocolMode === 'fitpro';
   const mediaSection = $('#mediaLibrarySection');
-  if (mediaSection) mediaSection.hidden = isFitPro;
+  if (mediaSection) mediaSection.hidden = !on || isFitPro;
   for (const sel of ['#functionType', '#allocMedia']) {
     const field = $(sel)?.closest('label');
     if (field) field.hidden = isFitPro;
@@ -40,6 +42,15 @@ function syncConnectionChrome() {
   const on = n > 0 && client.connected;
   $$('[data-need-conn]').forEach((b) => {
     b.disabled = !on;
+  });
+
+  // Show device controls only while a badge is connected; otherwise show a
+  // short prompt instead of a wall of disabled buttons.
+  $$('[data-conn-only]').forEach((el) => {
+    el.hidden = !on;
+  });
+  $$('[data-no-conn]').forEach((el) => {
+    el.hidden = on;
   });
 
   // Always allow adding another device while Web Bluetooth works
