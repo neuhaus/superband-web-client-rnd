@@ -154,6 +154,7 @@ function renderSnapshot(snap) {
     hardware: dash(s.hardware),
     software: dash(s.software),
     manufacturer: dash(s.manufacturer),
+    mac: dash(s.mac),
     battery,
     protocol: dash(s.protocol),
     free: fmtBig(s.freeStorage),

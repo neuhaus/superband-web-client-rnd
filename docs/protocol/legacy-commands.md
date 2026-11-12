@@ -111,6 +111,19 @@ v = sex<<31 | age<<24 | height(cm)<<15 | weight(kg)<<5
 
 **Step target** (module `0x12` key 3): `u32BE(steps)`.
 
+**Device MAC** (module `0x1A` key 10, response, 6 bytes): the badge's own
+**BD_ADDR**, e.g. `AA BB CC DD EE FF` → `AA:BB:CC:DD:EE:FF`. This is the
+*identity* address — the same one the badge shows on its screen (and its QR
+code). The host OS / Web Bluetooth may expose a **different** random
+(resolvable private) address for the same device, so treat the MAC from this
+response as authoritative. The manager stores it as `deviceMac` and shows it as
+**BLE MAC** in the identity grid.
+
+**Device name** (module `0x1A` key 12, response): `u8 len ‖ ASCII`, e.g.
+`04 42 47 30 32` → `"BG02"`.
+
+**Capability** (module `0x1A` key 28, response): 6 bytes, e.g. `01 20 00 00 00 01`.
+
 ## Worked frames
 
 | Action | Bytes |
@@ -124,6 +137,8 @@ v = sex<<31 | age<<24 | height(cm)<<15 | weight(kg)<<5
 | Shutdown | `CD 00 05 12 01 FD 00 00` |
 | Realtime step ON | `CD 00 06 15 01 06 00 01 01` |
 | Device reset | `CD 00 02 1D 01` |
+| Legacy MAC request | `CD 00 05 1A 01 0A 00 00` |
+| Legacy MAC response | `CD 00 0B 1A 01 0A 00 06 AA BB CC DD EE FF` |
 | Find phone (device control) | `CD 00 05 1C 01 01 00 00` |
 | Remote shutter (device control) | `CD 00 05 1C 01 02 00 00` |
 

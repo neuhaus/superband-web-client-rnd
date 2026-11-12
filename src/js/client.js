@@ -44,6 +44,8 @@ import {
   fitproByteSum,
   looksLikeFitProBadge,
   buildLegacyProbe,
+  parseLegacyMac,
+  parseLegacyName,
 } from './fitpro.js';
 import {
   PREVIEW,
@@ -85,6 +87,8 @@ class BadgeSession {
     this.deviceInfo = null;
     this.disInfo = null;
     this.battery = null;
+    /** Badge's own BD_ADDR, parsed from the legacy 0x1A/0x0A response. */
+    this.deviceMac = null;
     this.mediaId = null;
     this.mediaList = null;
     /** @type {'unknown'|'baji'|'fitpro'} */
@@ -132,6 +136,7 @@ class BadgeSession {
       software: dis.software || null,
       manufacturer: dis.manufacturer || null,
       serial: dis.serial || null,
+      mac: this.deviceMac || null,
       protocol:
         baji.protocolVersion ||
         (this.protocolMode === 'fitpro' ? 'FitPro dial31' : this.protocolMode === 'baji' ? 'Baji' : null),
@@ -236,6 +241,21 @@ class BadgeSession {
       }
     }
 
+    // Legacy 0x1A responses: key 10 = device BD_ADDR, key 12 = name.
+    if (pkt.moduleId === FitPro.LEGACY_MODULE || pkt.moduleKey === FitPro.LEGACY_MODULE) {
+      if (pkt.commandId === 10) {
+        const mac = parseLegacyMac(pkt.payload);
+        if (mac && mac !== this.deviceMac) {
+          this.deviceMac = mac;
+          this._log(`Device MAC ${mac} (legacy 0x1A/0x0A)`, 'info');
+          this.hub._emitSnapshot();
+        }
+      } else if (pkt.commandId === 12) {
+        const legacyName = parseLegacyName(pkt.payload);
+        if (legacyName && !this.name) this.name = legacyName;
+      }
+    }
+
     for (const [, w] of this._waiters) {
       if (w.predicate(pkt)) {
         w.resolve(pkt);
@@ -254,6 +274,7 @@ class BadgeSession {
           this.deviceInfo = null;
           this.disInfo = null;
           this.battery = null;
+          this.deviceMac = null;
           this.mediaId = null;
           this.mediaList = null;
           this.dialInfo = null;

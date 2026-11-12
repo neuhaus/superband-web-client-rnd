@@ -174,6 +174,40 @@ export function buildLegacyProbe(cmd) {
   return buildFitProFrame(FitPro.LEGACY_MODULE, cmd);
 }
 
+/**
+ * Legacy `0x1A` key 10 response payload = the badge's own 6-byte BD_ADDR.
+ * This is the *identity* address shown on the badge screen (and its QR code);
+ * the OS/Web Bluetooth may expose a different random (resolvable) advertising
+ * address for the same device.
+ * @param {Uint8Array} payload
+ * @returns {string|null} e.g. "AA:BB:CC:DD:EE:FF"
+ */
+export function parseLegacyMac(payload) {
+  if (!payload || payload.length < 6) return null;
+  return [...payload.slice(0, 6)]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join(':')
+    .toUpperCase();
+}
+
+/**
+ * Legacy `0x1A` key 12 response payload = `u8 len ‖ ASCII name` (e.g. "BG02").
+ * @param {Uint8Array} payload
+ * @returns {string|null}
+ */
+export function parseLegacyName(payload) {
+  if (!payload || payload.length < 2) return null;
+  const len = payload[0];
+  const end = Math.min(payload.length, 1 + len);
+  let s = '';
+  for (let i = 1; i < end; i++) {
+    const c = payload[i];
+    if (c < 0x20 || c > 0x7e) return null;
+    s += String.fromCharCode(c);
+  }
+  return s || null;
+}
+
 export function buildDialStart(startPayload) {
   return buildFitProFrame(FitPro.DIAL_MODULE, FitPro.DialCmd.START, startPayload);
 }
