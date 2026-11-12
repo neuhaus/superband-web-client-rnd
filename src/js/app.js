@@ -560,12 +560,18 @@ async function rcspProbe() {
       if (!p || p.length < 2) return '';
       return `   = ${JSON.stringify(new TextDecoder().decode(p.slice(1)).replace(/\u0000+$/, ''))}`;
     })();
+    const storage = (r.storages || [])
+      .map((s) => `  ${s.name} index=${s.index} handle=${s.handle ?? '-'} ${s.online ? 'online' : 'offline'}`)
+      .join('\n');
     out.textContent = [
       'RCSP auth + info (post-auth)',
       line('GET_TARGET_INFO', r.target),
       line('external-flash op 12 (free space)', r.free) + free,
       line('external-flash op 3/0 (current watch)', r.current) + watch,
-    ].join('\n');
+      storage ? `storages:\n${storage}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
     toast('RCSP probe done — see log', 'ok');
   } catch (e) {
     out.textContent = `RCSP probe failed: ${e.message}`;
@@ -584,7 +590,7 @@ async function listFacesRcsp() {
   box.hidden = false;
   box.textContent = 'RCSP: authenticating + browsing… (see log)';
   try {
-    const entries = await client.rcspList({ type: 1 });
+    const entries = await client.rcspList();
     const state = { entries };
     renderFaceList(state);
     toast(entries.length ? `${entries.length} file(s)` : 'No files listed', entries.length ? 'ok' : 'warn');
@@ -600,7 +606,7 @@ function renderFaceList(state) {
   box.hidden = false;
   box.innerHTML = '';
   if (!state.entries.length) {
-    box.textContent = 'No files listed (browse returned nothing — see log).';
+    box.textContent = 'No files listed (browse returned nothing — see the log).';
     return;
   }
   const table = document.createElement('table');
@@ -608,12 +614,13 @@ function renderFaceList(state) {
   for (const entry of state.entries) {
     const tr = document.createElement('tr');
     const tdName = document.createElement('td');
-    tdName.textContent = `${entry.typeName}  ${entry.name || '(unnamed)'}`;
     tdName.className = 'mono';
+    tdName.textContent = entry.name || '(unnamed)';
     const tdMeta = document.createElement('td');
-    tdMeta.textContent = `id=0x${entry.id.toString(16)} cluster=0x${(entry.cluster >>> 0).toString(16)} dev=${entry.devIndex}`;
-    tdMeta.className = 'mono';
+    tdMeta.className = 'meta mono';
+    tdMeta.textContent = `${entry.typeName} · id=0x${entry.id.toString(16)} · cluster=0x${(entry.cluster >>> 0).toString(16)}`;
     const tdAct = document.createElement('td');
+    tdAct.className = 'act';
     const btn = document.createElement('button');
     btn.textContent = 'Download';
     btn.addEventListener('click', () => downloadFace(entry, btn));

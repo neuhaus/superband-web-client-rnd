@@ -681,6 +681,7 @@ class BadgeSession {
           { timeoutMs },
         )
         .catch((e) => ({ error: e.message }));
+      out.storages = await session.listStorage({ timeoutMs }).catch(() => []);
       return out;
     } finally {
       session.stop();
@@ -688,10 +689,20 @@ class BadgeSession {
   }
 
   /** List stored files over RCSP (authenticated). */
-  async rcspList({ type = 0, readNum = 255, path = [0], pathLenLittle = false, timeoutMs = 8000 } = {}) {
+  async rcspList({ timeoutMs = 8000 } = {}) {
     const session = await this._openRcsp({ timeoutMs });
     try {
-      return await session.browseAll({ type, readNum, path, pathLenLittle });
+      return await session.listFiles();
+    } finally {
+      session.stop();
+    }
+  }
+
+  /** Enumerate storage devices over RCSP (authenticated). */
+  async rcspStorage({ timeoutMs = 8000 } = {}) {
+    const session = await this._openRcsp({ timeoutMs });
+    try {
+      return await session.listStorage({ timeoutMs });
     } finally {
       session.stop();
     }
@@ -1369,6 +1380,10 @@ export class SuperBandClient extends EventTarget {
 
   async rcspList(opts) {
     return this._requireActive().rcspList(opts);
+  }
+
+  async rcspStorage(opts) {
+    return this._requireActive().rcspStorage(opts);
   }
 
   async rcspDownload(entry, opts) {

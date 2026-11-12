@@ -25,6 +25,7 @@ export const RCSP_EXTERNAL_FLASH_CMD = 26;
 /** RCSP command ids for the filesystem layer. */
 export const RcspFsCmd = {
   GET_TARGET_INFO: 0x03,
+  GET_SYS_INFO: 0x07,
   START_FILE_BROWSE: 0x0c,
   STOP_FILE_BROWSE: 0x0d,
   FILE_METADATA: 0x1b,
@@ -42,6 +43,18 @@ export const RcspFlag = {
 /** Storage device handlers (JieLi): 0=USB 1=SD0 2=SD1 3=Flash. */
 export const DeviceHandler = { USB: 0, SD0: 1, SD1: 2, FLASH: 3 };
 export const DEVICE_NAMES = ['USB', 'SD0', 'SD1', 'Flash'];
+
+/** JieLi storage indexes (DevStorageInfo.INDEX_*). The watch resource lives on
+ * Flash (3) or Flash3 (6) — see WatchOpImpl.WATCH_STORAGE_INDEX_LIST. */
+export const StorageName = {
+  0: 'USB',
+  1: 'SD0',
+  2: 'SD1',
+  3: 'Flash',
+  4: 'LineIn',
+  5: 'Flash2',
+  6: 'Flash3',
+};
 
 export const ExternalOp = {
   WRITE_DATA: 0,
@@ -191,6 +204,69 @@ export function parseFileEntries(data, queryType) {
     });
   }
   return entries;
+}
+
+/**
+ * Parse a list of LTV attributes: `[len u8][type u8][data (len-1) bytes]`.
+ * `len` counts the type byte plus data.
+ */
+export function parseLtvAttrs(data) {
+  const attrs = [];
+  let i = 0;
+  while (i + 2 <= data.length) {
+    const len = data[i];
+    const type = data[i + 1];
+    if (len <= 1 || i + 1 + len > data.length) break;
+    attrs.push({ type, data: data.slice(i + 2, i + 1 + len) });
+    i += 1 + len;
+  }
+  return attrs;
+}
+
+/**
+ * Decode a `DevStorageInfo` blob (attr type 2 of sys-info mask 4) into storage
+ * states. Handles both the old bitmask form and the new (0xFF-prefixed) form.
+ * @returns {Array<{index:number, handle:(number|null), online:boolean, name:string}>}
+ */
+export function parseDevStorageInfo(data) {
+  const states = [];
+  const push = (index, handle, online) =>
+    states.push({ index, handle, online, name: StorageName[index] || `idx${index}` });
+
+  if (data.length && data[0] === 0xff) {
+    if (data.length <= 2) return states;
+    for (const attr of parseLtvAttrs(data.slice(2))) {
+      if (attr.type !== 1) continue;
+      let i = 0;
+      while (i + 2 <= attr.data.length) {
+        const online = attr.data[i] === 1;
+        const index = attr.data[i + 1];
+        if (!online || i + 6 > attr.data.length) {
+          push(index, null, online);
+          i += 2;
+          continue;
+        }
+        const handle =
+          ((attr.data[i + 2] << 24) | (attr.data[i + 3] << 16) | (attr.data[i + 4] << 8) | attr.data[i + 5]) >>> 0;
+        push(index, handle, online);
+        i += 6;
+      }
+    }
+    return states;
+  }
+
+  // Old bitmask form: byte0 bits = online per index; 4-byte BE handle each, skipping LineIn (4).
+  const bits = data[0] || 0;
+  let i = 1;
+  for (let idx = 0; idx < 6; idx++) {
+    const online = ((bits >> idx) & 1) === 1;
+    if (idx === 4) continue;
+    if (i + 4 > data.length) break;
+    const handle = ((data[i] << 24) | (data[i + 1] << 16) | (data[i + 2] << 8) | data[i + 3]) >>> 0;
+    push(idx, handle, online);
+    i += 4;
+  }
+  return states;
 }
 
 /** Auth + framed RCSP session over AE01/AE02. */
@@ -402,14 +478,21 @@ export class RcspSession {
 
   // ── Framed commands ──────────────────────────────────────────────────────
 
-  /** Send a command and return the first matching response frame. */
-  async request(cmd, paramData = new Uint8Array(0), { timeoutMs = 8000 } = {}) {
+  /** Send a command and return the first matching response frame (retries once on timeout). */
+  async request(cmd, paramData = new Uint8Array(0), { timeoutMs = 8000, retries = 1 } = {}) {
     if (!this.authDone) throw new Error('RCSP: not authenticated');
-    await this._sendFrame(cmd, paramData, { type: 1, hasResponse: 1 });
-    for (;;) {
-      const pkt = await this._waitFrame(timeoutMs);
-      if (pkt.type === 0 && pkt.opcode === cmd) return pkt;
-      // ignore device pushes / unrelated frames
+    for (let attempt = 0; ; attempt++) {
+      await this._sendFrame(cmd, paramData, { type: 1, hasResponse: 1 });
+      try {
+        for (;;) {
+          const pkt = await this._waitFrame(timeoutMs);
+          if (pkt.type === 0 && pkt.opcode === cmd) return pkt;
+          // ignore device pushes / unrelated frames
+        }
+      } catch (e) {
+        if (attempt >= retries) throw e;
+        this.onLog(`RCSP cmd 0x${cmd.toString(16)} timed out — retrying`, 'warn');
+      }
     }
   }
 
@@ -419,6 +502,25 @@ export class RcspSession {
 
   externalFlash(param, opts) {
     return this.request(RCSP_EXTERNAL_FLASH_CMD, param, opts);
+  }
+
+  /** GET_SYS_INFO (cmd 7): param = function(1) | mask(4 BE). */
+  async sysInfo({ function: fn = 0xff, mask = 4, timeoutMs = 8000 } = {}) {
+    const pkt = await this.request(RcspFsCmd.GET_SYS_INFO, concat(u8(fn), u32be(mask)), { timeoutMs });
+    const payload = pkt.payload;
+    const attrs = payload.length > 1 ? parseLtvAttrs(payload.slice(1)) : [];
+    return { function: payload.length ? payload[0] : fn, attrs, payload };
+  }
+
+  /** Enumerate storage devices (USB/SD/Flash) with their handles. */
+  async listStorage({ timeoutMs = 8000 } = {}) {
+    const { attrs } = await this.sysInfo({ function: 0xff, mask: 4, timeoutMs });
+    const out = [];
+    for (const attr of attrs) {
+      if ((attr.type & 0xff) === 2) out.push(...parseDevStorageInfo(attr.data));
+    }
+    for (const s of out) this.onLog(`RCSP storage ${s.name} index=${s.index} handle=${s.handle ?? '-'} ${s.online ? 'online' : 'offline'}`, 'info');
+    return out;
   }
 
   // ── File browse ──────────────────────────────────────────────────────────
@@ -471,19 +573,48 @@ export class RcspSession {
     return parseFileEntries(entryBuf, type);
   }
 
-  /** Browse every storage handler, skipping ones that reject (e.g. absent). */
-  async browseAll({ type = 0, readNum = 255, path = [0], pathLenLittle = false } = {}) {
-    const all = [];
-    for (const handler of [DeviceHandler.USB, DeviceHandler.SD0, DeviceHandler.SD1, DeviceHandler.FLASH]) {
+  /**
+   * Browse every storage device. Uses handles from GET_SYS_INFO when available,
+   * falling back to the default handler ids. Skips devices that reject.
+   * @param {{type?:number, readNum?:number, path?:number[], handles?:number[]}} [opts]
+   */
+  async browseAll({ type = 0, readNum = 255, path = [0], handles = null } = {}) {
+    let candidates = handles;
+    if (!candidates) {
       try {
-        const entries = await this.browse({ devHandler: handler, type, readNum, path, pathLenLittle });
-        if (entries.length) this.onLog(`RCSP ${DEVICE_NAMES[handler]}: ${entries.length} entries`, 'info');
+        const storages = await this.listStorage();
+        candidates = storages.filter((s) => s.online && s.handle != null).map((s) => s.handle);
+      } catch (e) {
+        this.onLog(`RCSP storage query failed (${e.message}); trying default handlers`, 'warn');
+      }
+    }
+    if (!candidates || !candidates.length) candidates = [DeviceHandler.USB, DeviceHandler.SD0, DeviceHandler.SD1, DeviceHandler.FLASH];
+
+    const all = [];
+    for (const handle of candidates) {
+      try {
+        const entries = await this.browse({ devHandler: handle, type, readNum, path });
+        if (entries.length) this.onLog(`RCSP handle ${handle}: ${entries.length} entries`, 'info');
         all.push(...entries);
       } catch (e) {
-        this.onLog(`RCSP ${DEVICE_NAMES[handler]}: skipped (${e.message})`, 'warn');
+        this.onLog(`RCSP handle ${handle}: skipped (${e.message})`, 'warn');
       }
     }
     return all;
+  }
+
+  /** List files (type 1) and folders (type 0) across all storage devices. */
+  async listFiles({ readNum = 255, path = [0] } = {}) {
+    let handles = null;
+    try {
+      const storages = await this.listStorage();
+      handles = storages.filter((s) => s.online && s.handle != null).map((s) => s.handle);
+    } catch {
+      /* fall back inside browseAll */
+    }
+    const files = await this.browseAll({ type: 1, readNum, path, handles });
+    const folders = await this.browseAll({ type: 0, readNum, path, handles });
+    return [...folders, ...files];
   }
 
   // ── File read (small-file op) ────────────────────────────────────────────

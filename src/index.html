@@ -260,43 +260,65 @@
             </div>
           </section>
 
-          <section class="section">
+          <section class="section" style="grid-column: 1 / -1">
             <h2>Faces / videos on the badge</h2>
             <p class="lead">
-              List what the badge is storing (dial list,
-              <span class="mono">0x20/3</span>) — the payload is shown raw because the layout
-              isn't fully documented. Delete an entry by dial id
-              (<span class="mono">0x1F/4</span>) to free space, or switch to it
-              (<span class="mono">0x1F/5</span>). Deleting is permanent.
+              What the badge is storing, read over JieLi <span class="mono">RCSP</span> (service
+              <span class="mono">ae00</span>). RCSP is auth-gated — the badge ignores commands until a
+              six-step handshake completes, which the tool does automatically on connect.
             </p>
-            <div class="stack">
-              <div class="row">
-                <button data-need-conn disabled id="btnDialList">List faces / videos</button>
-                <button data-need-conn disabled id="btnDialPresetList">List presets (all)</button>
-                <button data-need-conn disabled id="btnRcspProbe">RCSP auth + info</button>
-                <button data-need-conn disabled id="btnRcspList">List faces (RCSP)</button>
-                <label class="field">
-                  File path (RCSP)
-                  <input id="rcspPath" type="text" placeholder="/WATCH" />
-                </label>
-                <button data-need-conn disabled id="btnRcspReadPath">Download by path</button>
-                <label class="field">
-                  Dial ID
-                  <input id="dialDeleteId" type="number" min="0" step="1" placeholder="5538" />
-                </label>
-                <button data-need-conn disabled id="btnDialSwitch">Switch</button>
-                <button class="danger" data-need-conn disabled id="btnDialDelete">
-                  Delete dial
-                </button>
+
+            <div class="cards">
+              <div class="card">
+                <div class="card-head">
+                  <h3>Stored faces</h3>
+                  <span class="tag ok">RCSP</span>
+                </div>
+                <p class="hint">
+                  Lists the badge's files and downloads them. The displayed face lives at
+                  <span class="mono">/WATCH</span>.
+                </p>
+                <div class="row">
+                  <button class="primary" data-need-conn disabled id="btnRcspProbe">
+                    Connect &amp; read info
+                  </button>
+                  <button data-need-conn disabled id="btnRcspList">List files</button>
+                </div>
+                <div class="row">
+                  <label class="field grow">
+                    Download by path
+                    <input id="rcspPath" type="text" placeholder="/WATCH" />
+                  </label>
+                  <button data-need-conn disabled id="btnRcspReadPath">Download</button>
+                </div>
+                <div id="rcspFaceList" class="faceList" hidden></div>
               </div>
-              <pre
-                class="lead mono"
-                id="dialListOut"
-                hidden
-                style="white-space: pre-wrap; word-break: break-all"
-              ></pre>
-              <div id="rcspFaceList" hidden></div>
+
+              <div class="card muted">
+                <div class="card-head">
+                  <h3>Legacy dial list</h3>
+                  <span class="tag warn">0xCD</span>
+                </div>
+                <p class="hint">
+                  FitPro dial protocol. On these badges the read is a raw dump and the delete is a
+                  no-op — free space via the badge's own menu (trashcan), not here.
+                </p>
+                <div class="row">
+                  <button data-need-conn disabled id="btnDialList">List dials</button>
+                  <button data-need-conn disabled id="btnDialPresetList">List presets</button>
+                </div>
+                <div class="row">
+                  <label class="field">
+                    Dial ID
+                    <input id="dialDeleteId" type="number" min="0" step="1" placeholder="5538" />
+                  </label>
+                  <button data-need-conn disabled id="btnDialSwitch">Switch</button>
+                  <button class="danger" data-need-conn disabled id="btnDialDelete">Delete</button>
+                </div>
+              </div>
             </div>
+
+            <pre class="log-out mono" id="dialListOut" hidden></pre>
           </section>
 
           <section class="section" style="grid-column: 1 / -1">
