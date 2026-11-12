@@ -95,7 +95,9 @@ CD <len> 27 01 01 00 00            (stop, no status)
 CD <len> 27 01 01 00 01 <status>   (stop, status; 00 = success)
 ```
 
-The host stops streaming and replies with the **end response** above.
+The host stops streaming and replies with the **end response** above. The badge
+sends this **when you exit the viewfinder app on the badge**, and the host may
+also send the stop itself when the user ends the stream.
 
 ## Flow control
 
@@ -141,12 +143,38 @@ transport in `BadgeSession.previewStart` / `previewSendFrame` / `previewStop`
   a small ATT MTU. 512 is the browser maximum.
 - Stop the phone app first — it holds the badge's only LE link.
 
+## Verified on hardware
+
+Confirmed working end-to-end with the manager on:
+
+| Field | Value |
+|---|---|
+| Badge | GAP name `BG02` |
+| Hardware | `LJ733_MB_V1.5` (LJ733 / AC707n-class) |
+| Firmware | `V35922` |
+| Protocol path | FitPro (`BG*` GAP names skip the Baji probe) |
+
+Observed lifecycle:
+
+```
+dev → app : cd 00 0a 27 01 00 00 05 00 00 f0 00 f0   device-initiated start, 240×240
+app → dev : aa bb cc dd ee ff <len> <jpeg> ff ee dd cc bb aa   frames, ~1–6 KB JPEG
+dev → app : cd 00 06 27 01 01 00 01 00                end (user exited the badge app)
+app → dev : cd 00 06 27 01 01 00 01 00                end response
+app → dev : aa bb cc dd ee ff 00 00 00 00 ff ee dd cc bb aa   stop
+```
+
+- **No per-frame ACK is required** — local GATT write completion is sufficient
+  flow control (the badge did not notify per frame).
+- **200-byte chunks work** on this firmware (1–6 KB JPEG frames → 6–32 ATT
+  writes each); the badge rendered the stream.
+- The badge reports its size in the (device-initiated) start response; here
+  **240×240**.
+- Exiting the badge's viewfinder app produces the end command even if the host
+  was not streaming; replying with end-response + stop is correct.
+
 ## Open questions
 
-- Whether `0x27` targets the badge panel or a sibling product — **confirmed on
-  LJ733 / `BG02`**: the badge reports **240×240** in its device-initiated start
-  response (default constant is 240×296).
 - Whether all firmware accepts preview frames on `7E400002`, or a vendor service
-  (`0x3802` / `4A02`) on some units.
-- Exact per-frame notify/ack behaviour (observed: local GATT completion only;
-  pending a first successful stream capture).
+  (`0x3802` / `4A02`) on some units (unconfirmed; `BG02` uses the UART write char).
+- Whether a larger chunk than 200 B is accepted on higher-MTU firmware.
