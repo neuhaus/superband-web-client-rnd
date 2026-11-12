@@ -296,10 +296,11 @@
                 </div>
                 <p class="hint">
                   Lists the badge's files and downloads them. The displayed face lives at
-                  <span class="mono">/WATCH</span>. <em>Download by path</em> uses the name-based read
-                  (cmd <span class="mono">0x24 op 2</span>); some firmware only supports
-                  cluster-based reads (via <em>List files</em>) and may drop the link — reconnect if
-                  it does.
+                  <span class="mono">/WATCH</span>.
+                  <strong>On BG02 the RCSP browse returns no entries</strong> and the name-based
+                  read (<span class="mono">0x24 op 2</span>) <strong>drops the link</strong>, so face
+                  download isn't available on this firmware — the panel is still useful for
+                  connect/info.
                 </p>
                 <div class="row">
                   <button class="primary" data-need-conn disabled id="btnRcspProbe">

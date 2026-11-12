@@ -691,6 +691,14 @@ async function downloadPath() {
     return;
   }
   const path = ($('#rcspPath').value || '').trim() || '/WATCH';
+  if (
+    !window.confirm(
+      'Reading a file by name (cmd 0x24 op 2) disconnects this badge on known firmware. ' +
+        'Continue anyway?',
+    )
+  ) {
+    return;
+  }
   const btn = $('#btnRcspReadPath');
   const label = btn.textContent;
   btn.disabled = true;
