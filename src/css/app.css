@@ -1015,3 +1015,30 @@ input[type='number'] {
   overflow: auto;
 }
 
+/* Collapsible "experimental" block inside a card */
+.exp {
+  border-top: 1px solid var(--line);
+  padding-top: 0.55rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.exp > summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--muted);
+  list-style: none;
+}
+
+.exp > summary::-webkit-details-marker {
+  display: none;
+}
+
+.exp > summary::before {
+  content: '▸ ';
+}
+
+.exp[open] > summary::before {
+  content: '▾ ';
+}
+

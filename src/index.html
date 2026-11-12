@@ -295,27 +295,34 @@
                   <span class="tag ok">RCSP</span>
                 </div>
                 <p class="hint">
-                  Lists the badge's files and downloads them. The displayed face lives at
-                  <span class="mono">/WATCH</span>.
-                  <strong>On BG02 the RCSP browse returns no entries</strong> and the name-based
-                  read (<span class="mono">0x24 op 2</span>) <strong>drops the link</strong>, so face
-                  download isn't available on this firmware — the panel is still useful for
-                  connect/info.
+                  Reads the badge's storage state over authenticated RCSP: connection, free space,
+                  the current watch path (<span class="mono">/WATCH</span>) and the storage list.
                 </p>
                 <div class="row">
                   <button class="primary" data-need-conn disabled id="btnRcspProbe">
                     Connect &amp; read info
                   </button>
-                  <button data-need-conn disabled id="btnRcspList">List files</button>
                 </div>
-                <div class="row">
-                  <label class="field grow">
-                    Download by path
-                    <input id="rcspPath" type="text" placeholder="/WATCH" />
-                  </label>
-                  <button data-need-conn disabled id="btnRcspReadPath">Download</button>
-                </div>
-                <div id="rcspFaceList" class="faceList" hidden></div>
+
+                <details class="exp">
+                  <summary>Experimental: raw file access</summary>
+                  <p class="hint">
+                    On <span class="mono">BG02</span> the RCSP browse returns no entries and the
+                    name-based read (<span class="mono">0x24 op 2</span>) drops the link, so these
+                    can't succeed on this firmware — kept for other devices.
+                  </p>
+                  <div class="row">
+                    <button data-need-conn disabled id="btnRcspList">List files</button>
+                  </div>
+                  <div class="row">
+                    <label class="field grow">
+                      Download by path
+                      <input id="rcspPath" type="text" placeholder="/WATCH" />
+                    </label>
+                    <button data-need-conn disabled id="btnRcspReadPath">Download</button>
+                  </div>
+                  <div id="rcspFaceList" class="faceList" hidden></div>
+                </details>
               </div>
 
               <div class="card muted">
