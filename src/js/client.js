@@ -68,6 +68,12 @@ import {
   parsePreviewStartResponse,
 } from './preview.js';
 import {
+  RcspSession,
+  buildExternalFlashParam,
+  ExternalOp,
+  WatchSubOp,
+} from './rcsp.js';
+import {
   buildSyncTime,
   buildFindDevice,
   buildSetStepTarget,
@@ -632,6 +638,37 @@ class BadgeSession {
     if (!this.connected) throw new Error('Not connected');
     await this.write(buildDialSwitch(dialId), 'DIAL_SWITCH');
     return { id: dialId };
+  }
+
+  /**
+   * Read-only RCSP probe: GET_TARGET_INFO + external-flash free space + current
+   * watch. Confirms the JieLi RCSP face-management path works on this badge.
+   */
+  async rcspProbe({ timeoutMs = 6000 } = {}) {
+    if (!this.connected) throw new Error('Not connected');
+    const { writeChar, notifyChar } = await this.ble.getRcspChars();
+    const session = new RcspSession(writeChar, notifyChar, {
+      onLog: (msg, level) => this._log(msg, level),
+    });
+    await session.start();
+    try {
+      const out = {};
+      out.target = await session
+        .getTargetInfo({ timeoutMs })
+        .catch((e) => ({ error: e.message }));
+      out.free = await session
+        .externalFlash(buildExternalFlashParam({ op: ExternalOp.GET_LEFT_SPACE }), { timeoutMs })
+        .catch((e) => ({ error: e.message }));
+      out.current = await session
+        .externalFlash(
+          buildExternalFlashParam({ op: ExternalOp.WATCH_OP, flag: WatchSubOp.CURRENT }),
+          { timeoutMs },
+        )
+        .catch((e) => ({ error: e.message }));
+      return out;
+    } finally {
+      session.stop();
+    }
   }
 
   async transferFile(
@@ -1276,6 +1313,10 @@ export class SuperBandClient extends EventTarget {
 
   async dialSwitch(dialId) {
     return this._requireActive().dialSwitch(dialId);
+  }
+
+  async rcspProbe(opts) {
+    return this._requireActive().rcspProbe(opts);
   }
 
   async transferFile(fileBytes, opts) {

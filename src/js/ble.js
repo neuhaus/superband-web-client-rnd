@@ -182,6 +182,18 @@ export class SuperBandBle {
   }
 
   /**
+   * Get the JieLi RCSP write/notify characteristics (AE01/AE02) from the same
+   * connection, for the watch-resource / external-flash commands.
+   */
+  async getRcspChars() {
+    if (!this.server) throw new Error('Not connected');
+    const svc = await this.server.getPrimaryService(JIELI_OTA.SERVICE);
+    const writeChar = await svc.getCharacteristic(JIELI_OTA.WRITE);
+    const notifyChar = await svc.getCharacteristic(JIELI_OTA.NOTIFY);
+    return { writeChar, notifyChar };
+  }
+
+  /**
    * Queue a GATT write.
    * @param {Uint8Array|ArrayBuffer} data
    * @param {string} label

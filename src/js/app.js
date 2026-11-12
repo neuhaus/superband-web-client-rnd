@@ -537,6 +537,32 @@ async function listPresetDials() {
   }
 }
 
+async function rcspProbe() {
+  if (!client.connected) {
+    toast('Connect a badge first', 'err');
+    return;
+  }
+  const out = $('#dialListOut');
+  out.hidden = false;
+  out.textContent = 'RCSP probe running — see the activity log…';
+  try {
+    const r = await client.rcspProbe();
+    const line = (name, v) =>
+      `${name}: ${v?.error ? `error: ${v.error}` : `op=0x${v.opcode.toString(16)} status=0x${(v.status ?? 0).toString(16)} payload=${[...(v.payload || [])].map((b) => b.toString(16).padStart(2, '0')).join(' ')}`}`;
+    out.textContent = [
+      'RCSP probe (read-only)',
+      line('GET_TARGET_INFO', r.target),
+      line('external-flash op 12 (free space)', r.free),
+      line('external-flash op 3/0 (current watch)', r.current),
+    ].join('\n');
+    toast('RCSP probe done — see log', 'ok');
+  } catch (e) {
+    out.textContent = `RCSP probe failed: ${e.message}`;
+    toast(e.message, 'err');
+    log({ msg: `RCSP probe: ${e.message}`, level: 'err' });
+  }
+}
+
 async function deleteDial() {
   const id = Number($('#dialDeleteId').value);
   if (!Number.isFinite(id) || id < 0) {
@@ -724,6 +750,7 @@ function bind() {
   $('#btnVideoFreeSpace').addEventListener('click', () => queryVideoFreeSpace());
   $('#btnDialList').addEventListener('click', () => listDials());
   $('#btnDialPresetList').addEventListener('click', () => listPresetDials());
+  $('#btnRcspProbe').addEventListener('click', () => rcspProbe());
   $('#btnDialDelete').addEventListener('click', () => deleteDial());
   $('#btnDialSwitch').addEventListener('click', () => switchDial());
   $('#btnMediaList').addEventListener('click', () =>
