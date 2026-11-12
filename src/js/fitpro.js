@@ -51,7 +51,7 @@ export const FitPro = {
 export function looksLikeFitProBadge(name) {
   if (!name) return false;
   const n = String(name);
-  return /^(BJ|DG)/i.test(n) || /BadgeOK|SuperBand|_V\d/i.test(n);
+  return /^(BJ|DG|BG)/i.test(n) || /BadgeOK|SuperBand|_V\d/i.test(n);
 }
 
 function putU16BE(out, offset, value) {

@@ -130,6 +130,12 @@ transport in `BadgeSession.previewStart` / `previewSendFrame` / `previewStop`
 - Camera comes from `getUserMedia`; `canvas.toBlob('image/jpeg', q)` produces the
   JPEG. A **test pattern** mode draws synthetic frames so the wire path can be
   exercised without a camera.
+- **Device-initiated**: when you open the viewfinder on the badge it sends the
+  start response itself —
+  `CD 0A 27 01 00 00 05 00 <w:u16BE> <h:u16BE>` (e.g. `00 00 f0 00 f0` =
+  240×240 on LJ733 / `BG02`). The manager then **auto-starts streaming** without
+  sending `PREVIEW_START` (toggle: *Auto-start when the badge requests it*) and
+  answers the device end command automatically.
 - **Chunk size matters**: Web Bluetooth does not expose the negotiated MTU. The
   manager defaults to 200-byte chunks; lower it if frames stall on firmware with
   a small ATT MTU. 512 is the browser maximum.
@@ -137,8 +143,10 @@ transport in `BadgeSession.previewStart` / `previewSendFrame` / `previewStop`
 
 ## Open questions
 
-- Whether `0x27` targets the badge panel or a sibling product (default 240×296
-  differs from the 360×360 badge panel).
+- Whether `0x27` targets the badge panel or a sibling product — **confirmed on
+  LJ733 / `BG02`**: the badge reports **240×240** in its device-initiated start
+  response (default constant is 240×296).
 - Whether all firmware accepts preview frames on `7E400002`, or a vendor service
   (`0x3802` / `4A02`) on some units.
-- Exact per-frame notify/ack behaviour (observed: local GATT completion only).
+- Exact per-frame notify/ack behaviour (observed: local GATT completion only;
+  pending a first successful stream capture).

@@ -32,6 +32,7 @@ export function bindExtras(ctx) {
   let latestDims = { width: PREVIEW.DEFAULT_WIDTH, height: PREVIEW.DEFAULT_HEIGHT };
 
   const testPattern = () => $('#liveTestPattern')?.checked ?? false;
+  const autoStart = () => $('#liveAutoStart')?.checked ?? true;
   const fpsTarget = () => clamp(Number($('#liveFps')?.value) || PREVIEW.DEFAULT_FPS, 1, 30);
   const quality = () => clamp(Number($('#liveQuality')?.value) || PREVIEW.DEFAULT_QUALITY, 0.1, 0.95);
   const chunkSize = () => clamp(Number($('#liveChunk')?.value) || PREVIEW.DEFAULT_CHUNK, 20, 512);
@@ -50,8 +51,9 @@ export function bindExtras(ctx) {
 
   function updateLiveButtons() {
     const on = client.connected;
-    if ($('#btnLiveStart')) $('#btnLiveStart').disabled = !on || running;
-    if ($('#btnLiveStop')) $('#btnLiveStop').disabled = !running;
+    const active = running || client.previewActive;
+    if ($('#btnLiveStart')) $('#btnLiveStart').disabled = !on || active;
+    if ($('#btnLiveStop')) $('#btnLiveStop').disabled = !active;
     if ($('#btnLiveCamera')) $('#btnLiveCamera').disabled = running;
   }
 
@@ -168,6 +170,26 @@ export function bindExtras(ctx) {
     setTimeout(loop, wait);
   }
 
+  function beginStreaming(dims) {
+    latestDims = {
+      width: clamp(Number(dims?.width) || PREVIEW.DEFAULT_WIDTH, 16, 1024),
+      height: clamp(Number(dims?.height) || PREVIEW.DEFAULT_HEIGHT, 16, 1024),
+    };
+    canvas.width = latestDims.width;
+    canvas.height = latestDims.height;
+    frames = 0;
+    startedAt = performance.now();
+    lastStatsAt = 0;
+    running = true;
+    updateLiveButtons();
+    setLiveMeta(
+      `Streaming ${latestDims.width}×${latestDims.height} ${testPattern() ? '(test pattern)' : '(camera)'}`,
+      'ok',
+    );
+    renderStats();
+    loop();
+  }
+
   async function startPreview() {
     if (running) return;
     if (!client.connected) {
@@ -175,25 +197,17 @@ export function bindExtras(ctx) {
       return;
     }
     try {
-      if (!testPattern()) await ensureCamera();
-      const dims = await client.previewStart({ timeoutMs: 6000 });
-      latestDims = {
-        width: clamp(Number(dims?.width) || PREVIEW.DEFAULT_WIDTH, 16, 1024),
-        height: clamp(Number(dims?.height) || PREVIEW.DEFAULT_HEIGHT, 16, 1024),
-      };
-      canvas.width = latestDims.width;
-      canvas.height = latestDims.height;
-      frames = 0;
-      startedAt = performance.now();
-      lastStatsAt = 0;
-      running = true;
-      updateLiveButtons();
-      setLiveMeta(
-        `Streaming ${latestDims.width}×${latestDims.height} ${testPattern() ? '(test pattern)' : '(camera)'}`,
-        'ok',
-      );
-      renderStats();
-      loop();
+      let dims;
+      const snap = client.getSnapshot?.() || {};
+      if (client.previewActive && snap.previewWidth) {
+        // Badge already started the viewfinder — do not send START again.
+        dims = { width: snap.previewWidth, height: snap.previewHeight };
+      } else {
+        if (!testPattern()) await ensureCamera();
+        dims = await client.previewStart({ timeoutMs: 6000 });
+      }
+      if (!testPattern() && !stream) await ensureCamera().catch(() => {});
+      beginStreaming(dims);
     } catch (e) {
       setLiveMeta(e.message, 'err');
       toast(e.message, 'err');
@@ -202,9 +216,9 @@ export function bindExtras(ctx) {
   }
 
   async function stopPreview({ respond = false, quiet = false } = {}) {
-    const wasRunning = running;
+    const wasActive = running || client.previewActive;
     running = false;
-    if (!wasRunning && !client.previewActive) {
+    if (!wasActive) {
       updateLiveButtons();
       return;
     }
@@ -229,12 +243,29 @@ export function bindExtras(ctx) {
     if (!testPattern()) stopCamera();
   });
 
-  // Device asked us to stop (or the app opened the photo page): honour it.
+  // Device asked us to start/stop (badge opened/closed its camera UI).
   client.addEventListener('preview', (e) => {
     const phase = e.detail?.phase;
-    if (phase === 'device-end' && running) {
+    if (phase === 'device-start') {
+      log({
+        msg: `Badge requested viewfinder (${e.detail.width}×${e.detail.height})`,
+        level: 'ok',
+      });
+      if (autoStart()) {
+        startPreview();
+      } else {
+        setLiveMeta('Badge requested viewfinder — press Start to stream', 'busy');
+        updateLiveButtons();
+      }
+    } else if (phase === 'device-end') {
       log({ msg: 'Badge requested preview stop', level: 'info' });
-      stopPreview({ respond: true });
+      running = false;
+      updateLiveButtons();
+      client.previewStop({ respond: true }).catch((err) =>
+        log({ msg: `Preview end response: ${err.message}`, level: 'warn' }),
+      );
+      setLiveMeta('Idle', '');
+      renderStats();
     } else if (phase === 'stopped') {
       running = false;
       updateLiveButtons();

@@ -97,6 +97,7 @@ class BadgeSession {
     this.previewActive = false;
     this.previewDims = null;
     this._previewEnded = false;
+    this._previewStartPending = false;
   }
 
   get connected() {
@@ -195,8 +196,24 @@ class BadgeSession {
   _onPacket(pkt) {
     this._emit('packet', { packet: pkt });
 
+    // Device-initiated viewfinder: the badge opened its camera UI and asks the
+    // phone to start streaming (no local PREVIEW_START pending).
+    if (!this._previewStartPending && isPreviewStartResponse(pkt)) {
+      const r = parsePreviewStartResponse(pkt.payload);
+      if (r?.ok) {
+        this.previewActive = true;
+        this.previewDims = { width: r.width, height: r.height };
+        this._log(`Badge opened its viewfinder — display ${r.width}×${r.height}`, 'ok');
+        this._emit('preview', { phase: 'device-start', width: r.width, height: r.height });
+        this.hub._emitSessions();
+      } else {
+        this._emit('preview', { phase: 'device-start-denied', status: r?.status ?? null });
+      }
+    }
+
     if (isPreviewEndCommand(pkt)) {
       this._previewEnded = true;
+      this.previewActive = false;
       this._emit('preview', {
         phase: 'device-end',
         status: pkt.payload && pkt.payload.length ? pkt.payload[0] : null,
@@ -723,20 +740,25 @@ class BadgeSession {
     if (this.previewActive) throw new Error('Preview already running');
     if (this._transferring) throw new Error('A file transfer is in progress');
     this._previewEnded = false;
-    await this.write(buildPreviewStart(), 'PREVIEW_START');
-    const pkt = await this._waitFor((p) => isPreviewStartResponse(p), {
-      timeoutMs,
-      label: 'PREVIEW_START_RESPONSE',
-    });
-    const r = parsePreviewStartResponse(pkt.payload);
-    if (!r) throw new Error('Malformed preview start response');
-    if (!r.ok) throw new Error(`Device rejected preview (status ${r.status})`);
-    this.previewActive = true;
-    this.previewDims = { width: r.width, height: r.height };
-    this._log(`Preview started — device display ${r.width}×${r.height}`, 'ok');
-    this._emit('preview', { phase: 'started', width: r.width, height: r.height });
-    this.hub._emitSessions();
-    return this.previewDims;
+    this._previewStartPending = true;
+    try {
+      await this.write(buildPreviewStart(), 'PREVIEW_START');
+      const pkt = await this._waitFor((p) => isPreviewStartResponse(p), {
+        timeoutMs,
+        label: 'PREVIEW_START_RESPONSE',
+      });
+      const r = parsePreviewStartResponse(pkt.payload);
+      if (!r) throw new Error('Malformed preview start response');
+      if (!r.ok) throw new Error(`Device rejected preview (status ${r.status})`);
+      this.previewActive = true;
+      this.previewDims = { width: r.width, height: r.height };
+      this._log(`Preview started — device display ${r.width}×${r.height}`, 'ok');
+      this._emit('preview', { phase: 'started', width: r.width, height: r.height });
+      this.hub._emitSessions();
+      return this.previewDims;
+    } finally {
+      this._previewStartPending = false;
+    }
   }
 
   /** Push one JPEG frame to the badge display (chunked raw 0xAA…0xAA frame). */

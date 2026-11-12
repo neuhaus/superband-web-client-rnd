@@ -21,6 +21,8 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 ### Added
 
 - **Live viewfinder (remote camera)** — stream the host camera to the badge over the product **`0x27`** realtime-preview path: start/stop, device start-response parsing, per-frame ATT chunking with configurable size, device end-command handling, and a camera-free **test-pattern** mode (`src/js/preview.js`, `src/js/extras.js`, `client.previewStart/SendFrame/Stop`)
+- **Device-initiated viewfinder** — when the badge opens its camera UI it sends the start response itself; the manager auto-starts streaming (no `PREVIEW_START`) and answers the end command. Confirmed on LJ733 / `BG02` (240×240)
+- FitPro detection also matches `BG*` GAP names (e.g. `BG02`), skipping the Baji probe timeout
 - **Quick actions** — legacy MyWatch commands: sync time, find, step goal, user profile, realtime step, remote photo page / shutter, find phone, enter OTA mode, shutdown, factory reset (`src/js/commands.js`)
 - Debug console: product `0x27` preview + legacy settings buttons and builders
 - Docs: [`protocol/live-preview.md`](docs/protocol/live-preview.md) and [`protocol/legacy-commands.md`](docs/protocol/legacy-commands.md)
