@@ -141,7 +141,44 @@ export class SuperBandBle {
       this.log(`Pair frame failed: ${e.message}`, 'warn');
     }
 
+    // Read-only: log which GATT services the browser granted (UART, JieLi
+    // RCSP AE00, battery, DIS…). Web Bluetooth only exposes services listed in
+    // optionalServices, so this reveals e.g. whether an RCSP service exists.
+    try {
+      await this.dumpServices();
+    } catch {
+      /* non-fatal */
+    }
+
     return this.device;
+  }
+
+  /**
+   * Enumerate every GATT primary service the browser has granted access to.
+   * @returns {Promise<Array<{uuid:string, characteristics:string[]}>>}
+   */
+  async dumpServices() {
+    if (!this.server) return [];
+    const out = [];
+    let services = [];
+    try {
+      services = await this.server.getPrimaryServices();
+    } catch (e) {
+      this.log(`GATT service enumeration failed: ${e.message}`, 'warn');
+      return out;
+    }
+    for (const svc of services) {
+      let chars = [];
+      try {
+        chars = (await svc.getCharacteristics()).map((c) => c.uuid);
+      } catch {
+        /* some stacks refuse characteristic listing */
+      }
+      out.push({ uuid: svc.uuid, characteristics: chars });
+      this.log(`GATT ${svc.uuid}${chars.length ? ` → ${chars.join(', ')}` : ''}`, 'info');
+    }
+    if (!out.length) this.log('GATT: no services granted to enumerate', 'warn');
+    return out;
   }
 
   /**
