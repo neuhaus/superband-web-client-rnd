@@ -69,10 +69,17 @@ Request polls; response payload is **u32BE status**:
 |----|-------|-------|
 | List | `CD 00 05 20 01 03 00 00` (`0x20`/`3`) | reply layout not fully documented — treat as raw |
 | Free space | `CD 00 05 20 01 04 00 00` (`0x20`/`4`) | reply = byte count (u64 BE) |
-| Delete | `CD 00 09 1F 01 04 00 04 <id u32BE>` (`0x1F`/`4`) | id = watch/dial id (e.g. `5538` = `00 00 15 A2`) |
+| Delete | `CD 00 09 1F 01 04 00 04 <id u32BE>` (`0x1F`/`4`) | id = watch/dial id (e.g. `5538` = `00 00 15 A2`). **No-op on `BG02`** — see below |
 | Switch | `CD 00 09 1F 01 05 00 04 <id u32BE>` (`0x1F`/`5`) | make a stored dial active |
+| Factory reset | `CD 00 02 1D 01` | **reboots only** — does not clear stored dials, frees nothing |
+
+Delete over `0xCD` is accepted but ignored on this firmware: the byte-identical SDK frame (`WatchThemeTransferManager`) and the factory reset both leave the stored dial untouched and free space unchanged. Stored faces are owned by JieLi's **RCSP** watch-resource layer (`AE00`), not the `0xCD` dial path, so freeing space must go through the badge itself.
+
+**Reclaim via the badge UI:** the badge's on-device menu has a **trashcan** entry that deletes the **currently displayed** image/video/GIF. Verified on `BG02`: after deleting, the free-space query (`0x20`/`4`) rose from `28 672` → `413 696` bytes (~385 KB reclaimed). So the space accounting is real; the `0xCD` link simply cannot trigger a delete.
 
 There is **no documented read-back of the stored image/video bytes** on the FitPro path — the dial protocol is write-oriented. (Asset download exists only on the Baji `0x02` module, which these badges don't implement.) The manager exposes list/delete/switch in the **Faces / videos on the badge** panel.
+
+The badge also exposes JieLi **RCSP** (`0000ae00`, write `ae01` / notify `ae02`), the transport the app uses for watch resources. Its *external-flash* command (id `26`) has delete (`op 5`), file-info (`op 11`), read (`op 1`) and left-space (`op 12`) ops — a candidate path for listing and downloading stored faces. On `BG02` the RCSP session was probed with no reply; see `src/js/rcsp.js`.
 
 ## Payload formats
 
