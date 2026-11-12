@@ -35,6 +35,8 @@ Production static site is published to **GitHub Pages** by [`.github/workflows/p
 | Glance strip | Active badge: name, model, firmware, battery, hardware, free storage |
 | Device | Full DIS + battery + optional Baji storage/protocol; refresh; re-pair |
 | Push image | **Push to active** / **Push to all**; FitPro dial (`gh3` ACKs/6 ms; ~498 B atomic frames); 360×360; round mask |
+| Live viewfinder | Product `0x27` realtime preview — stream camera (or test pattern) to the badge; FPS / JPEG quality / chunk size; honours device end-command |
+| Quick actions | Sync time, find, step goal, user profile, realtime step, remote photo page / shutter, find phone, OTA mode, shutdown, factory reset |
 | Media library | Allocate ID, list, delete (auto-refresh attempted after connect / push) |
 | Advanced · OTA | CDN presets (BJ-1 / DG01), local zip/ufw, catalog probe, BLE RCSP flash |
 | Advanced · GATT | Probe active services / AE00 picker |
@@ -61,6 +63,9 @@ If only a legacy `0xDC` pair ack arrives (e.g. **BJ-1**), the UI still shows DIS
 |--------|------|
 | `js/protocol.js` | Frame codec (Baji + FitPro CD), CRC32, GATT UUIDs, `REPO_URL` |
 | `js/fitpro.js` | FitPro dial31 builders + dial-info parse |
+| `js/preview.js` | Product `0x27` live-viewfinder frame builders + parsers |
+| `js/commands.js` | Legacy MyWatch settings / device-control builders (quick actions) |
+| `js/extras.js` | Live viewfinder camera loop + quick-action bindings |
 | `js/ota-catalog.js` | CDN presets, zip→ufw, tomato probe helpers |
 | `js/jieli-ota.js` | JieLi RCSP OTA over `AE00`/`AE01`/`AE02` |
 | `js/advanced.js` | Advanced tab bindings |
@@ -116,4 +121,5 @@ Use for raw hex writes, arbitrary module/command packets, and verbose wire inspe
 | Device info timeout | Normal on some FW — use glance DIS fields; push still works |
 | UART missing | Wrong peripheral; check activity log |
 | Push NACK | Free storage; smaller JPEG; see [error codes](protocol/commands.md#error-codes) |
+| Live preview no frames / stalls | Lower **Chunk bytes** (small ATT MTU); stop the phone app (it holds the LE link); try **Test pattern** to isolate camera vs wire |
 | List empty | Device may omit list or use alternate layout — push still works |

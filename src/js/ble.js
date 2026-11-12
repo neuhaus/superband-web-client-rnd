@@ -167,9 +167,15 @@ export class SuperBandBle {
       const props = this.writeChar.properties;
       const withoutResponse = !!props.writeWithoutResponse;
 
-      if (!atomic && bytes.length > this.maxWriteLength) {
-        // Rare non-frame bulk path only — FitPro dial must stay atomic.
-        const fragSize = this.maxWriteLength;
+      const wantChunk =
+        Number(opts.chunkSize) > 0
+          ? Math.min(Number(opts.chunkSize), this.maxWriteLength)
+          : this.maxWriteLength;
+
+      if (!atomic && bytes.length > wantChunk) {
+        // Bulk path (raw preview frames, non-atomic helpers). FitPro dial CD
+        // frames must stay atomic — pass atomic:true there.
+        const fragSize = wantChunk;
         const parts = [];
         for (let o = 0; o < bytes.length; o += fragSize) {
           parts.push(bytes.subarray(o, Math.min(o + fragSize, bytes.length)));

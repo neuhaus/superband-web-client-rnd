@@ -38,8 +38,9 @@
           </nav>
         </div>
         <p>
-          Manage your electronic badge over Bluetooth — push faces, inspect storage, and run
-          advanced OTA / protocol tools.
+          Manage your electronic badge over Bluetooth — push faces, mirror your camera to the badge
+          (live viewfinder), send quick device commands, inspect storage, and run advanced OTA /
+          protocol tools.
         </p>
         <div class="hero-cta">
           <span class="status-pill" id="connPill" data-state="">Disconnected</span>
@@ -186,6 +187,114 @@
               >
               <p class="lead" id="imageMeta">No image selected.</p>
               <div class="progress" id="pushProgress" hidden><i id="pushBar"></i></div>
+            </div>
+          </section>
+
+          <section class="section" style="grid-column: 1 / -1">
+            <h2>Live viewfinder</h2>
+            <p class="lead">
+              Stream your camera to the badge display &mdash; the <span class="mono">0x27</span>
+              realtime-preview (remote viewfinder) product. The badge can also open your photo page and
+              take remote pictures (see Quick actions).
+            </p>
+            <div class="stack">
+              <div class="live-stage">
+                <video id="liveVideo" playsinline muted hidden></video>
+                <canvas id="liveCanvas" width="240" height="296" class="live-canvas"></canvas>
+              </div>
+              <div class="row">
+                <button data-need-conn disabled id="btnLiveCamera">Enable camera</button>
+                <button class="primary" data-need-conn disabled id="btnLiveStart">Start stream</button>
+                <button class="danger" id="btnLiveStop" disabled>Stop</button>
+                <span class="status-pill" id="liveMeta" data-state="">Idle</span>
+              </div>
+              <div class="row">
+                <label class="field">
+                  FPS
+                  <input id="liveFps" type="number" value="10" min="1" max="30" />
+                </label>
+                <label class="field">
+                  JPEG quality
+                  <input id="liveQuality" type="number" value="0.7" min="0.1" max="0.95" step="0.05" />
+                </label>
+                <label class="field">
+                  Chunk bytes
+                  <input id="liveChunk" type="number" value="200" min="20" max="512" />
+                </label>
+                <label class="check"
+                  ><input type="checkbox" id="liveTestPattern" /> Test pattern (no camera)</label
+                >
+              </div>
+              <p class="hint" id="liveStats">frames=0 avg=0.0fps</p>
+              <p class="hint">
+                Stop the phone app first — it holds the only LE link. Some firmware negotiates a
+                smaller ATT MTU: if frames stall, lower <span class="mono">Chunk bytes</span>. Test
+                pattern is a camera-free wire check.
+              </p>
+            </div>
+          </section>
+
+          <section class="section" style="grid-column: 1 / -1">
+            <h2>Quick actions</h2>
+            <p class="lead">
+              Legacy MyWatch settings / device-control frames (modules
+              <span class="mono">0x12</span> · <span class="mono">0x15</span> ·
+              <span class="mono">0x1C</span>).
+            </p>
+            <div class="stack">
+              <div class="row">
+                <button data-need-conn disabled data-qa="syncTime">Sync time</button>
+                <button data-need-conn disabled data-qa="findOn">Find ON</button>
+                <button data-need-conn disabled data-qa="findOff">Find OFF</button>
+                <button data-need-conn disabled data-qa="realtimeStepOn">Realtime step ON</button>
+                <button data-need-conn disabled data-qa="realtimeStepOff">Realtime step OFF</button>
+              </div>
+              <div class="row">
+                <label class="field">
+                  Step goal
+                  <input id="qaGoalSteps" type="number" value="10000" min="0" max="100000" />
+                </label>
+                <button data-need-conn disabled data-qa="setGoal">Set goal</button>
+              </div>
+              <div class="row">
+                <label class="field">
+                  Sex
+                  <select id="qaSex">
+                    <option value="0">Male</option>
+                    <option value="1">Female</option>
+                  </select>
+                </label>
+                <label class="field">
+                  Age
+                  <input id="qaAge" type="number" value="30" min="1" max="120" />
+                </label>
+                <label class="field">
+                  Height cm
+                  <input id="qaHeight" type="number" value="170" min="50" max="250" />
+                </label>
+                <label class="field">
+                  Weight kg
+                  <input id="qaWeight" type="number" value="70" min="20" max="300" />
+                </label>
+                <button data-need-conn disabled data-qa="setUserInfo">Set profile</button>
+              </div>
+              <div class="row">
+                <button data-need-conn disabled data-qa="takePhotoOn">Photo page ON</button>
+                <button data-need-conn disabled data-qa="takePhotoOff">Photo page OFF</button>
+                <button data-need-conn disabled data-dc="openCamera">Open badge camera</button>
+                <button data-need-conn disabled data-dc="takePhoto">Remote shutter</button>
+              </div>
+              <div class="row">
+                <button data-need-conn disabled data-dc="findPhone">Find phone</button>
+                <button data-need-conn disabled data-dc="stopFindPhone">Stop find phone</button>
+                <button data-need-conn disabled data-dc="hangUp">Hang up</button>
+                <button data-need-conn disabled data-dc="answerPhone">Answer call</button>
+              </div>
+              <div class="row">
+                <button class="ghost" data-need-conn disabled data-qa="otaMode">Enter OTA mode</button>
+                <button class="danger" data-need-conn disabled data-qa="shutdown">Shutdown</button>
+                <button class="danger" data-need-conn disabled data-qa="reset">Factory reset</button>
+              </div>
             </div>
           </section>
 

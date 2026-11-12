@@ -45,6 +45,30 @@ import {
   looksLikeFitProBadge,
   buildLegacyProbe,
 } from './fitpro.js';
+import {
+  PREVIEW,
+  buildPreviewStart,
+  buildPreviewEndResponse,
+  buildPreviewStop,
+  buildPreviewFrame,
+  isPreviewStartResponse,
+  isPreviewEndCommand,
+  parsePreviewStartResponse,
+} from './preview.js';
+import {
+  buildSyncTime,
+  buildFindDevice,
+  buildSetStepTarget,
+  buildSetUserInfo,
+  buildSetLanguage,
+  buildDisturbSwitch,
+  buildRealtimeStep,
+  buildTakePhoto,
+  buildDeviceControl,
+  buildEnterOtaMode,
+  buildShutdown,
+  buildDeviceReset,
+} from './commands.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -69,6 +93,10 @@ class BadgeSession {
     this._fileId = 1n;
     this._waiters = new Map();
     this._transferring = false;
+    /** Live viewfinder (product 0x27) state. */
+    this.previewActive = false;
+    this.previewDims = null;
+    this._previewEnded = false;
   }
 
   get connected() {
@@ -82,6 +110,11 @@ class BadgeSession {
   /** True when Baji media/file modules are available. */
   get supportsBajiMedia() {
     return this.protocolMode === 'baji';
+  }
+
+  /** True when the session is doing heavy work (file transfer or live preview). */
+  get busy() {
+    return this._transferring || this.previewActive;
   }
 
   getSnapshot() {
@@ -112,6 +145,9 @@ class BadgeSession {
       dialHeight: dial.height ?? null,
       dialAlgorithm: dial.algorithm ?? null,
       transferring: this._transferring,
+      previewing: this.previewActive,
+      previewWidth: this.previewDims?.width ?? null,
+      previewHeight: this.previewDims?.height ?? null,
     };
   }
 
@@ -158,6 +194,14 @@ class BadgeSession {
 
   _onPacket(pkt) {
     this._emit('packet', { packet: pkt });
+
+    if (isPreviewEndCommand(pkt)) {
+      this._previewEnded = true;
+      this._emit('preview', {
+        phase: 'device-end',
+        status: pkt.payload && pkt.payload.length ? pkt.payload[0] : null,
+      });
+    }
 
     if (pkt.moduleId === Module.SYSTEM && pkt.commandId === SysCmd.DEVICE_INFO_RESPONSE) {
       const info = parseDeviceInfo(pkt.payload);
@@ -437,6 +481,7 @@ class BadgeSession {
       onProgress = null,
     } = {},
   ) {
+    if (this.previewActive) throw new Error('Live preview is running — stop it before pushing');
     if (this.protocolMode !== 'baji') {
       return this.transferDialFile(fileBytes, { onProgress });
     }
@@ -555,6 +600,7 @@ class BadgeSession {
    */
   async transferDialFile(fileBytes, { onProgress = null } = {}) {
     if (this._transferring) throw new Error('Transfer already in progress on this badge');
+    if (this.previewActive) throw new Error('Live preview is running — stop it before pushing');
     if (!this.connected) throw new Error('Not connected');
     this._transferring = true;
     this.hub._emitSessions();
@@ -666,6 +712,118 @@ class BadgeSession {
     }
   }
 
+  // ── Live viewfinder (product 0x27) ────────────────────────────────────────
+
+  /**
+   * Send the preview START frame and wait for the device start response.
+   * @returns {Promise<{width:number,height:number}>} device display size
+   */
+  async previewStart({ timeoutMs = 5000 } = {}) {
+    if (!this.connected) throw new Error('Not connected');
+    if (this.previewActive) throw new Error('Preview already running');
+    if (this._transferring) throw new Error('A file transfer is in progress');
+    this._previewEnded = false;
+    await this.write(buildPreviewStart(), 'PREVIEW_START');
+    const pkt = await this._waitFor((p) => isPreviewStartResponse(p), {
+      timeoutMs,
+      label: 'PREVIEW_START_RESPONSE',
+    });
+    const r = parsePreviewStartResponse(pkt.payload);
+    if (!r) throw new Error('Malformed preview start response');
+    if (!r.ok) throw new Error(`Device rejected preview (status ${r.status})`);
+    this.previewActive = true;
+    this.previewDims = { width: r.width, height: r.height };
+    this._log(`Preview started — device display ${r.width}×${r.height}`, 'ok');
+    this._emit('preview', { phase: 'started', width: r.width, height: r.height });
+    this.hub._emitSessions();
+    return this.previewDims;
+  }
+
+  /** Push one JPEG frame to the badge display (chunked raw 0xAA…0xAA frame). */
+  async previewSendFrame(jpeg, { chunkSize = PREVIEW.DEFAULT_CHUNK, paceMs = 4 } = {}) {
+    if (!this.connected) throw new Error('Not connected');
+    if (!this.previewActive) throw new Error('Preview not started');
+    const frame = buildPreviewFrame(jpeg);
+    await this.write(frame, `PREVIEW_FRAME(${jpeg.length}B)`, {
+      atomic: false,
+      chunkSize,
+      paceMs,
+      quiet: true,
+    });
+    this._emit('preview', { phase: 'frame', bytes: jpeg.length });
+    return frame.length;
+  }
+
+  /** Reply to a device-initiated end command (status 0 = success). */
+  async previewRespondEnd(status = PREVIEW.STATUS_SUCCESS) {
+    if (!this.connected) return;
+    await this.write(buildPreviewEndResponse(status), 'PREVIEW_END_RESPONSE', { quiet: true });
+  }
+
+  /** Stop the preview stream (optionally sending an end response first). */
+  async previewStop({ respond = false, status = PREVIEW.STATUS_SUCCESS } = {}) {
+    const wasActive = this.previewActive;
+    this.previewActive = false;
+    if (!this.connected) return;
+    if (respond) await this.previewRespondEnd(status);
+    await this.write(buildPreviewStop(), 'PREVIEW_STOP', { quiet: true });
+    if (wasActive) {
+      this._log('Preview stopped', 'info');
+      this._emit('preview', { phase: 'stopped' });
+      this.hub._emitSessions();
+    }
+  }
+
+  // ── Quick settings / device control (legacy MyWatch frames) ───────────────
+
+  async syncTime(date = new Date()) {
+    await this.write(buildSyncTime(date), 'SYNC_TIME');
+  }
+
+  async findDevice(on = true) {
+    await this.write(buildFindDevice(on), on ? 'FIND_DEVICE_ON' : 'FIND_DEVICE_OFF');
+  }
+
+  async setStepTarget(steps) {
+    await this.write(buildSetStepTarget(steps), 'SET_STEP_TARGET');
+  }
+
+  async setUserInfo(info) {
+    await this.write(buildSetUserInfo(info), 'SET_USER_INFO');
+  }
+
+  async setLanguage(index) {
+    await this.write(buildSetLanguage(index), 'SET_LANGUAGE');
+  }
+
+  async setDisturb(on, startHour, endHour) {
+    await this.write(buildDisturbSwitch(on, startHour, endHour), 'SET_DISTURB');
+  }
+
+  async setRealtimeStep(on) {
+    await this.write(buildRealtimeStep(on), 'REALTIME_STEP');
+  }
+
+  async takePhoto(on = true) {
+    await this.write(buildTakePhoto(on), on ? 'TAKE_PHOTO_ON' : 'TAKE_PHOTO_OFF');
+  }
+
+  async deviceControl(key, value = null) {
+    await this.write(buildDeviceControl(key, value), `DEV_CTRL_${key}`);
+  }
+
+  async enterOtaMode() {
+    await this.write(buildEnterOtaMode(), 'ENTER_OTA_MODE');
+  }
+
+  async shutdown() {
+    await this.write(buildShutdown(), 'SHUTDOWN');
+  }
+
+  async deviceReset() {
+    await this.write(buildDeviceReset(), 'DEVICE_RESET');
+  }
+
   async stopTransfer() {
     if (this.protocolMode === 'baji') {
       await this.write(buildTransferStop(this._fileId), 'TRANSFER_STOP');
@@ -731,6 +889,9 @@ export class SuperBandClient extends EventTarget {
       dialHeight: null,
       dialAlgorithm: null,
       sessionId: null,
+      previewing: false,
+      previewWidth: null,
+      previewHeight: null,
     };
   }
 
@@ -977,6 +1138,83 @@ export class SuperBandClient extends EventTarget {
     this._emitSessions();
     this._emitSnapshot();
     return results;
+  }
+
+  // ── Live viewfinder + quick commands (active session) ─────────────────────
+
+  get previewActive() {
+    return !!this.active?.previewActive;
+  }
+
+  get anyPreviewing() {
+    for (const session of this._sessions.values()) {
+      if (session.connected && session.previewActive) return true;
+    }
+    return false;
+  }
+
+  async previewStart(opts) {
+    return this._requireActive().previewStart(opts);
+  }
+
+  async previewSendFrame(jpeg, opts) {
+    return this._requireActive().previewSendFrame(jpeg, opts);
+  }
+
+  async previewRespondEnd(status) {
+    return this._requireActive().previewRespondEnd(status);
+  }
+
+  async previewStop(opts) {
+    return this._requireActive().previewStop(opts);
+  }
+
+  async syncTime(date) {
+    return this._requireActive().syncTime(date);
+  }
+
+  async findDevice(on) {
+    return this._requireActive().findDevice(on);
+  }
+
+  async setStepTarget(steps) {
+    return this._requireActive().setStepTarget(steps);
+  }
+
+  async setUserInfo(info) {
+    return this._requireActive().setUserInfo(info);
+  }
+
+  async setLanguage(index) {
+    return this._requireActive().setLanguage(index);
+  }
+
+  async setDisturb(on, startHour, endHour) {
+    return this._requireActive().setDisturb(on, startHour, endHour);
+  }
+
+  async setRealtimeStep(on) {
+    return this._requireActive().setRealtimeStep(on);
+  }
+
+  async takePhoto(on) {
+    return this._requireActive().takePhoto(on);
+  }
+
+  async deviceControl(key, value) {
+    return this._requireActive().deviceControl(key, value);
+  }
+
+  async enterOtaMode() {
+    return this._requireActive().enterOtaMode();
+  }
+
+  async shutdown() {
+    return this._requireActive().shutdown();
+  }
+
+  async deviceReset() {
+    return this._requireActive().deviceReset();
   }
 
   async stopTransfer() {

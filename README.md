@@ -48,7 +48,8 @@ Typical discovery hints from the reference client:
 - **GATT UART:** service `7E400001-B5A3-F393-E0A9-E50E24DCCA9D`  
   write `…0002` · notify `…0003`
 - **JieLi OTA:** service `0000AE00-…` · write `AE01` · notify `AE02`
-- **Frames:** `0xCD` start — Baji uses product `0x25`; FitPro dial uses modules `0x1F` / `0x20`
+- **Frames:** `0xCD` start — Baji uses product `0x25`; FitPro dial uses modules `0x1F` / `0x20`; legacy settings `0x12` / `0x15` / `0x1C`
+- **Live viewfinder:** product `0x27` — raw JPEG frames `AA BB CC DD EE FF | u32BE(len) | jpeg | FF EE DD CC BB AA` ([live-preview](docs/protocol/live-preview.md))
 - **Baji upload:** media ID → `TRANSFER_START` → ~200 B chunks → CRC32 → verify
 - **FitPro push (BJ-1):** dial31 start → data + byte-sum → finish ([dial-upload](docs/protocol/dial-upload.md))
 
@@ -75,6 +76,8 @@ The manager UI has two tabs: **Manager** (day-to-day) and **Advanced** (OTA / pr
 | Glance strip | Active badge name, model, firmware, battery, hardware, free storage |
 | Push image | Cover-crop to dial (default 360×360), round mask, JPEG ~q50 → **Baji** file transfer or **FitPro dial31** (auto) |
 | Push to all | Same image to every connected badge (sequential) |
+| Live viewfinder | Stream your camera to the badge — product `0x27` realtime preview (remote camera); test-pattern mode for camera-free wire checks |
+| Quick actions | Sync time, find, step goal, user profile, realtime step, remote photo page / shutter, find phone, OTA mode, shutdown, factory reset |
 | Media library | Allocate / list / delete media IDs (Baji only; skipped on FitPro badges like BJ-1) |
 | Activity log | TX/RX and status |
 

@@ -2,6 +2,7 @@ import { SuperBandClient, FileType, FunctionType } from './client.js';
 import { prepareFileForBadge, formatBytes, DEFAULT_DIAL } from './image.js';
 import { REPO_URL } from './protocol.js';
 import { bindAdvanced } from './advanced.js';
+import { bindExtras } from './extras.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -189,7 +190,7 @@ function renderSnapshot(snap) {
 function updatePushChecklist() {
   const connected = client.connected;
   const imageReady = !!prepared;
-  const idle = !transferring && !client.anyTransferring;
+  const idle = !transferring && !client.anyTransferring && !client.anyPreviewing;
   const map = { conn: connected, image: imageReady, idle };
   for (const [key, ok] of Object.entries(map)) {
     const li = document.querySelector(`[data-check="${key}"]`);
@@ -526,6 +527,10 @@ function bind() {
       renderMediaList(e.detail.items);
     }
   });
+  client.addEventListener('preview', () => {
+    renderSnapshot();
+    updatePushChecklist();
+  });
 }
 
 function initSupport() {
@@ -588,6 +593,7 @@ async function initBuildMeta() {
 
 bind();
 bindAdvanced({ client, log, toast, $ });
+bindExtras({ client, log, toast, $ });
 initSupport();
 initBuildMeta();
 syncConnectionChrome();

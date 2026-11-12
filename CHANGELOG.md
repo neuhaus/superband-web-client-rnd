@@ -20,6 +20,10 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ### Added
 
+- **Live viewfinder (remote camera)** — stream the host camera to the badge over the product **`0x27`** realtime-preview path: start/stop, device start-response parsing, per-frame ATT chunking with configurable size, device end-command handling, and a camera-free **test-pattern** mode (`src/js/preview.js`, `src/js/extras.js`, `client.previewStart/SendFrame/Stop`)
+- **Quick actions** — legacy MyWatch commands: sync time, find, step goal, user profile, realtime step, remote photo page / shutter, find phone, enter OTA mode, shutdown, factory reset (`src/js/commands.js`)
+- Debug console: product `0x27` preview + legacy settings buttons and builders
+- Docs: [`protocol/live-preview.md`](docs/protocol/live-preview.md) and [`protocol/legacy-commands.md`](docs/protocol/legacy-commands.md)
 - Clean-room firmware track: `docs/firmware-rewrite/`, `docs/protocol/firmware-contract.md`, portable dial31 scaffold `firmware/ac707n-open/`, `tools/map-fitpro-dispatch.py`, `tools/capture-dial-info.py`
 - Advanced dial-info probe downloads a JSON capture on success
 - Firmware OTA investigation notes (`docs/protocol/ota-firmware.md`)
