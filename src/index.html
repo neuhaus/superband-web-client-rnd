@@ -273,7 +273,8 @@
               <div class="row">
                 <button data-need-conn disabled id="btnDialList">List faces / videos</button>
                 <button data-need-conn disabled id="btnDialPresetList">List presets (all)</button>
-                <button data-need-conn disabled id="btnRcspProbe">RCSP probe</button>
+                <button data-need-conn disabled id="btnRcspProbe">RCSP auth + info</button>
+                <button data-need-conn disabled id="btnRcspList">List faces (RCSP)</button>
                 <label class="field">
                   Dial ID
                   <input id="dialDeleteId" type="number" min="0" step="1" placeholder="5538" />
@@ -289,6 +290,7 @@
                 hidden
                 style="white-space: pre-wrap; word-break: break-all"
               ></pre>
+              <div id="rcspFaceList" hidden></div>
             </div>
           </section>
 

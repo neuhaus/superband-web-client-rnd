@@ -870,3 +870,21 @@ input[type='number'] {
 .live-stage video {
   display: none;
 }
+
+/* RCSP face list */
+.faceTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.faceTable td {
+  padding: 0.3rem 0.4rem;
+  border-bottom: 1px solid var(--line, #2a2a33);
+  vertical-align: middle;
+}
+
+.faceTable td:last-child {
+  text-align: right;
+  white-space: nowrap;
+}

@@ -641,16 +641,32 @@ class BadgeSession {
   }
 
   /**
-   * Read-only RCSP probe: GET_TARGET_INFO + external-flash free space + current
-   * watch. Confirms the JieLi RCSP face-management path works on this badge.
+   * Open an authenticated RCSP session (AE01/AE02). Caller must `stop()` it.
+   * Runs the mandatory 6-step JieLi auth handshake first — without it the badge
+   * ignores RCSP commands.
    */
-  async rcspProbe({ timeoutMs = 6000 } = {}) {
+  async _openRcsp({ timeoutMs = 8000, resetAuthFlag = true } = {}) {
     if (!this.connected) throw new Error('Not connected');
     const { writeChar, notifyChar } = await this.ble.getRcspChars();
     const session = new RcspSession(writeChar, notifyChar, {
       onLog: (msg, level) => this._log(msg, level),
     });
     await session.start();
+    try {
+      await session.auth({ timeoutMs, resetAuthFlag });
+    } catch (e) {
+      session.stop();
+      throw e;
+    }
+    return session;
+  }
+
+  /**
+   * Authenticated RCSP probe: GET_TARGET_INFO + external-flash free space +
+   * current watch. Confirms the RCSP face-management path works on this badge.
+   */
+  async rcspProbe({ timeoutMs = 8000, resetAuthFlag = true } = {}) {
+    const session = await this._openRcsp({ timeoutMs, resetAuthFlag });
     try {
       const out = {};
       out.target = await session
@@ -666,6 +682,27 @@ class BadgeSession {
         )
         .catch((e) => ({ error: e.message }));
       return out;
+    } finally {
+      session.stop();
+    }
+  }
+
+  /** List stored files over RCSP (authenticated). */
+  async rcspList({ type = 0, readNum = 255, path = [0], pathLenLittle = false, timeoutMs = 8000 } = {}) {
+    const session = await this._openRcsp({ timeoutMs });
+    try {
+      return await session.browseAll({ type, readNum, path, pathLenLittle });
+    } finally {
+      session.stop();
+    }
+  }
+
+  /** Download a stored file over RCSP (authenticated). */
+  async rcspDownload(entry, { onProgress = null } = {}) {
+    const session = await this._openRcsp({});
+    try {
+      const data = await session.readFile(entry, { onProgress });
+      return { entry, data };
     } finally {
       session.stop();
     }
@@ -1317,6 +1354,14 @@ export class SuperBandClient extends EventTarget {
 
   async rcspProbe(opts) {
     return this._requireActive().rcspProbe(opts);
+  }
+
+  async rcspList(opts) {
+    return this._requireActive().rcspList(opts);
+  }
+
+  async rcspDownload(entry, opts) {
+    return this._requireActive().rcspDownload(entry, opts);
   }
 
   async transferFile(fileBytes, opts) {

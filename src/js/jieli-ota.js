@@ -93,8 +93,11 @@ export function parseRcspFrame(buf) {
   let o = 0;
   const status = type === 0 ? body[o++] : 0;
   const sn = body.length > o ? body[o++] : 0;
-  if (opcode === 1) o += 1; // xmOpCode
-  return { type, hasResponse, sn, opcode, status, payload: body.slice(o) };
+  let xmOpCode = null;
+  if (opcode === 1) {
+    xmOpCode = body.length > o ? body[o++] : 0;
+  }
+  return { type, hasResponse, sn, opcode, status, xmOpCode, payload: body.slice(o) };
 }
 
 /**

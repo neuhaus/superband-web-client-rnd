@@ -550,7 +550,7 @@ async function rcspProbe() {
     const line = (name, v) =>
       `${name}: ${v?.error ? `error: ${v.error}` : `op=0x${v.opcode.toString(16)} status=0x${(v.status ?? 0).toString(16)} payload=${[...(v.payload || [])].map((b) => b.toString(16).padStart(2, '0')).join(' ')}`}`;
     out.textContent = [
-      'RCSP probe (read-only)',
+      'RCSP auth + info (post-auth)',
       line('GET_TARGET_INFO', r.target),
       line('external-flash op 12 (free space)', r.free),
       line('external-flash op 3/0 (current watch)', r.current),
@@ -560,6 +560,81 @@ async function rcspProbe() {
     out.textContent = `RCSP probe failed: ${e.message}`;
     toast(e.message, 'err');
     log({ msg: `RCSP probe: ${e.message}`, level: 'err' });
+  }
+}
+
+/** List stored files over RCSP (authenticated) and render with Download buttons. */
+async function listFacesRcsp() {
+  if (!client.connected) {
+    toast('Connect a badge first', 'err');
+    return;
+  }
+  const box = $('#rcspFaceList');
+  box.hidden = false;
+  box.textContent = 'RCSP: authenticating + browsing… (see log)';
+  try {
+    const entries = await client.rcspList({ type: 1 });
+    const state = { entries };
+    renderFaceList(state);
+    toast(entries.length ? `${entries.length} file(s)` : 'No files listed', entries.length ? 'ok' : 'warn');
+  } catch (e) {
+    box.textContent = `RCSP list failed: ${e.message}`;
+    toast(e.message, 'err');
+    log({ msg: `RCSP list: ${e.message}`, level: 'err' });
+  }
+}
+
+function renderFaceList(state) {
+  const box = $('#rcspFaceList');
+  box.hidden = false;
+  box.innerHTML = '';
+  if (!state.entries.length) {
+    box.textContent = 'No files listed (browse returned nothing — see log).';
+    return;
+  }
+  const table = document.createElement('table');
+  table.className = 'faceTable';
+  for (const entry of state.entries) {
+    const tr = document.createElement('tr');
+    const tdName = document.createElement('td');
+    tdName.textContent = `${entry.typeName}  ${entry.name || '(unnamed)'}`;
+    tdName.className = 'mono';
+    const tdMeta = document.createElement('td');
+    tdMeta.textContent = `id=0x${entry.id.toString(16)} cluster=0x${(entry.cluster >>> 0).toString(16)} dev=${entry.devIndex}`;
+    tdMeta.className = 'mono';
+    const tdAct = document.createElement('td');
+    const btn = document.createElement('button');
+    btn.textContent = 'Download';
+    btn.addEventListener('click', () => downloadFace(entry, btn));
+    tdAct.appendChild(btn);
+    tr.append(tdName, tdMeta, tdAct);
+    table.appendChild(tr);
+  }
+  box.appendChild(table);
+}
+
+async function downloadFace(entry, btn) {
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Reading…';
+  try {
+    const { data } = await client.rcspDownload(entry);
+    const name = (entry.name || `face_${entry.id.toString(16)}`).replace(/[^\w.-]+/g, '_');
+    const blob = new Blob([data], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    btn.textContent = `Saved ${data.length} B`;
+    toast(`Downloaded ${name} (${data.length} B)`, 'ok');
+    log({ msg: `RCSP download ${name} → ${data.length} B`, level: 'ok' });
+  } catch (e) {
+    btn.textContent = label;
+    btn.disabled = false;
+    toast(e.message, 'err');
+    log({ msg: `RCSP download: ${e.message}`, level: 'err' });
   }
 }
 
@@ -751,6 +826,7 @@ function bind() {
   $('#btnDialList').addEventListener('click', () => listDials());
   $('#btnDialPresetList').addEventListener('click', () => listPresetDials());
   $('#btnRcspProbe').addEventListener('click', () => rcspProbe());
+  $('#btnRcspList').addEventListener('click', () => listFacesRcsp());
   $('#btnDialDelete').addEventListener('click', () => deleteDial());
   $('#btnDialSwitch').addEventListener('click', () => switchDial());
   $('#btnMediaList').addEventListener('click', () =>
