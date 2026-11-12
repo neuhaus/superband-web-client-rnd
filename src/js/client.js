@@ -37,6 +37,7 @@ import {
   buildDialFileBlob,
   parseDialInfo,
   parseDialStatusCode,
+  decodeDialStatus,
   formatDialUpgradeError,
   isFitProDialInfoPacket,
   isFitProDialStatusPacket,
@@ -90,6 +91,8 @@ class BadgeSession {
     this.battery = null;
     /** Badge's own BD_ADDR, parsed from the legacy 0x1A/0x0A response. */
     this.deviceMac = null;
+    /** Last free-space figure the badge reported for dial storage (bytes). */
+    this.dialFreeBytes = null;
     this.mediaId = null;
     this.mediaList = null;
     /** @type {'unknown'|'baji'|'fitpro'} */
@@ -141,6 +144,7 @@ class BadgeSession {
       manufacturer: dis.manufacturer || null,
       serial: dis.serial || null,
       mac: this.deviceMac || null,
+      dialFreeBytes: this.dialFreeBytes ?? null,
       protocol:
         baji.protocolVersion ||
         (this.protocolMode === 'fitpro' ? 'FitPro dial31' : this.protocolMode === 'baji' ? 'Baji' : null),
@@ -288,6 +292,7 @@ class BadgeSession {
           this.disInfo = null;
           this.battery = null;
           this.deviceMac = null;
+          this.dialFreeBytes = null;
           this.mediaId = null;
           this.mediaList = null;
           this.dialInfo = null;
@@ -479,6 +484,7 @@ class BadgeSession {
       timeoutMs = FitPro.ACK_TIMEOUT_MS,
       label = 'DIAL_STATUS',
       poll = true,
+      sizeBytes = null,
     } = {},
   ) {
     const deadline = Date.now() + timeoutMs;
@@ -505,11 +511,25 @@ class BadgeSession {
         const pkt = await pending;
         const code = parseDialStatusCode(pkt.payload);
         if (code === expectedCode) return pkt;
-        if (code >= 1 && code <= 9) {
-          throw new Error(formatDialUpgradeError(code));
+        const info = decodeDialStatus(code);
+        if (info.kind === 'error') {
+          throw new Error(formatDialUpgradeError(info.code));
         }
-        // Other codes in 1000+ band for a different seq — keep waiting.
+        if (info.kind === 'memory') {
+          this.dialFreeBytes = info.freeBytes;
+          this.hub._emitSnapshot();
+          const free = info.freeBytes != null ? `~${Math.round(info.freeBytes / 1024)} KB free` : 'out of space';
+          const need = sizeBytes != null ? ` (file is ${Math.round(sizeBytes / 1024)} KB)` : '';
+          const err = new Error(
+            `Badge storage too small — it reports ${free}${need}. Free space (delete a face/video) or shrink the video.`,
+          );
+          err.dialError = true;
+          err.dialMemoryFree = info.freeBytes;
+          throw err;
+        }
+        // ACK for a different seq, or an unrecognised code — keep waiting.
       } catch (e) {
+        if (e.dialError) throw e;
         if (String(e.message || '').startsWith('Dial upgrade error')) throw e;
         if (String(e.message || '').includes('Disconnected')) throw e;
         // slice timeout — loop until deadline
@@ -721,6 +741,7 @@ class BadgeSession {
           timeoutMs: FitPro.ACK_TIMEOUT_MS,
           label: 'DIAL_START_ACK(1000)',
           poll: true,
+          sizeBytes: fileBlob.length,
         });
       } finally {
         this._dialTrace = false;

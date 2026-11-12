@@ -199,11 +199,12 @@
               Loop a short animation on the badge — decoded in the browser to an
               <span class="mono">MJPG AVI</span> and uploaded over the FitPro dial31 path
               (<span class="mono">fileType 1</span>). GIF / WebP / APNG use the browser's
-              image decoder; MP4 / MOV / WebM are sampled at the chosen FPS. The badge is a
-              1.5&quot; <span class="mono">240&times;240</span> panel that holds roughly
-              <b>50 images</b>, <b>3 videos (each under 5 s)</b> and GIFs — pushing a 4th
-              video or over-filling the slots returns the firmware's <i>theme count limit</i>
-              status.
+              image decoder; MP4 / MOV / WebM are sampled at the chosen FPS. The AVI is
+              auto-tuned (JPEG quality, then frame rate) to stay within the
+              <b>size budget</b> — these badges often have well under 1&nbsp;MB free, and a
+              file that's too big is refused with an <i>out of storage</i> status. The badge
+              is a 1.5&quot; <span class="mono">240&times;240</span> panel holding roughly
+              <b>50 images</b>, <b>3 videos (each under 5 s)</b> and GIFs.
             </p>
             <div class="stack">
               <div class="dial-stage">
@@ -242,6 +243,10 @@
                 <label class="field">
                   Max seconds
                   <input id="videoSeconds" type="number" value="5" min="0.5" max="10" step="0.5" />
+                </label>
+                <label class="field">
+                  Size budget (KB)
+                  <input id="videoMaxKb" type="number" value="700" min="8" max="8192" step="8" />
                 </label>
               </div>
               <label class="check"

@@ -50,6 +50,7 @@ Request polls; response payload is **u32BE status**:
 |------|---------|
 | `1000` | Start accepted — send chunk seq 1 |
 | `1000 + n` | Chunk `n` accepted — send next (or finish) |
+| `100000000 + N` | **Out of storage** — band `{1e8, 2e8}`, value `<1><0><freeBytes>`; SDK maps to `ERROR_MEMORY_LESS` (1010) with `N` bytes available |
 | `2` | Upgrade success |
 | `1` | Verification failed |
 | `3` | Battery too low |
@@ -59,6 +60,8 @@ Request polls; response payload is **u32BE status**:
 | `7` | Duplicate upgrade |
 | `8` | Theme id not found |
 | `9` | Upgrade too frequent |
+
+> The `1000…` and `100000000…` bands are the ones the badge actually uses during an upload; the `1`–`9` codes arrive as terminal results. Observed on `BG02`: a video whose blob exceeded free space was refused with `06 01 E4 AC` = `100786348` = "1010, **786 348 B free**".
 
 ## Payload formats
 
@@ -98,7 +101,9 @@ The Android app pushes video/GIF as a **looping MJPG AVI** through the *same* di
 
 Container is a standard **RIFF/AVI**, `vids`/`MJPG`: an `avih` main header, `strl` (`strh` handler `MJPG` + `strf` BITMAPINFOHEADER), a `movi` list of `00dc` chunks (one raw JPEG each), and an `idx1` index. `src/js/avi.js` builds it from decoded frames; `src/js/video.js` decodes GIF/WebP/APNG (`ImageDecoder`) and video (`<video>` + canvas) into JPEG frames.
 
-The badge CPU is a **JieLi AC7076** ("7076 low power") — the same e-badge class as `samascience/ebadge` (BW03 / AC7076A) and the E01 units, whose firmware accepts **baseline JFIF stills or MJPEG-in-AVI**. That corroborates the container choice; playback of an AVI dial on this specific unit is still the unverified step.
+The badge CPU is a **JieLi AC7076** ("7076 low power") — the same e-badge class as `samascience/ebadge` (BW03 / AC7076A) and the E01 units, whose firmware accepts **baseline JFIF stills or MJPEG-in-AVI**. That corroborates the container choice.
+
+**Storage is the practical limit:** these badges often have well under 1 MB free, and a dial that exceeds free space is **refused at the start** with the `1e8`-band status (no `1000` ACK). The manager auto-tunes JPEG quality then frame rate to meet a *size budget* and reports the badge's free bytes on refusal. Live free space can be queried with `0x20`/cmd `4` (`getDialWatchRemainSpace`).
 
 Whether the badge firmware *plays* an AVI dial is the open question: the protocol slots and the app code path exist, but it has not yet been confirmed on hardware.
 

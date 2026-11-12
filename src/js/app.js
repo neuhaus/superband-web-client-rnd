@@ -2,7 +2,7 @@ import { SuperBandClient, FileType, FunctionType } from './client.js';
 import { prepareFileForBadge, formatBytes, DEFAULT_DIAL } from './image.js';
 import {
   extractFramesForBadge,
-  buildAviFromFrames,
+  fitAvi,
   isSupportedVideoFile,
   WATCH_VIDEO,
 } from './video.js';
@@ -462,7 +462,7 @@ async function rebuildVideoPreview() {
       round: $('#videoRound').checked,
     });
     videoPrepared = {
-      frames: result.frames,
+      sources: result.sources,
       width,
       height,
       fps,
@@ -476,10 +476,10 @@ async function rebuildVideoPreview() {
     $('#aviDial').classList.toggle('round', $('#videoRound').checked);
     const src =
       result.source === 'animated-image'
-        ? `${result.sourceFrames ?? result.frames.length}-frame image`
+        ? `${result.sourceFrames ?? result.sources.length}-frame image`
         : `${result.duration ? `${result.duration.toFixed(1)}s` : 'video'}`;
     $('#videoMeta').textContent =
-      `${file.name} (${src}) → ${result.frames.length} frames @ ${fps} fps · ${width}×${height}`;
+      `${file.name} (${src}) → ${result.sources.length} frames @ ${fps} fps · ${width}×${height}`;
     updatePushChecklist();
   } catch (e) {
     videoPrepared = null;
@@ -509,16 +509,27 @@ async function pushVideo() {
   transferring = true;
   updatePushChecklist();
   try {
-    const avi = buildAviFromFrames(videoPrepared.frames, {
+    const maxKb = Number($('#videoMaxKb').value) || Math.round(WATCH_VIDEO.maxBytes / 1024);
+    const maxBytes = maxKb * 1024;
+    const fit = await fitAvi(videoPrepared.sources, {
       width: videoPrepared.width,
       height: videoPrepared.height,
       fps: videoPrepared.fps,
+      maxBytes,
     });
+    const avi = fit.avi;
     log({
-      msg: `AVI ready — ${formatBytes(avi.length)} · ${videoPrepared.frames.length} frames ` +
-        `@ ${videoPrepared.fps} fps ${videoPrepared.width}×${videoPrepared.height}`,
+      msg:
+        `AVI ready — ${formatBytes(avi.length)} (budget ${maxKb} KB) · ${fit.frameCount} frames ` +
+        `@ ${fit.fps} fps q${fit.quality} ${videoPrepared.width}×${videoPrepared.height}`,
       level: 'info',
     });
+    if (avi.length > maxBytes) {
+      log({
+        msg: `AVI still over budget (${formatBytes(avi.length)} > ${maxKb} KB) — badge may refuse it`,
+        level: 'warn',
+      });
+    }
     const result = await client.transferFile(avi, {
       fileType: FileType.VIDEO,
       dialType: 1, // AVI (WatchTheme3 fileType 1)

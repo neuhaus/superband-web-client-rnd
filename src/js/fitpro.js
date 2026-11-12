@@ -313,6 +313,26 @@ export function formatDialUpgradeError(code) {
   return `Dial upgrade error status=${code} (${dialUpgradeStatusMessage(code)})`;
 }
 
+/**
+ * Interpret a raw dial-status code the way SDK `WatchTheme3Tools.response()` does.
+ * Bands: `{1000,1e8}` chunk ACKs, `{1e8,2e8}` storage (`<1><0><freeBytes>`),
+ * then small codes `2`=success / `1..9`=errors.
+ * @returns {{kind:'ack',seq:number}|{kind:'success'}|{kind:'error',code:number}|{kind:'memory',freeBytes:number|null}|{kind:'other',code:number}}
+ */
+export function decodeDialStatus(code) {
+  if (code == null) return { kind: 'other', code: null };
+  if (code >= 1000 && code < 100000000) return { kind: 'ack', seq: code - 1000 };
+  if (code >= 100000000 && code < 200000000) {
+    const s = String(code);
+    // dy "1 0 <freeBytes>" → memory-less; else a different 1e8-band message.
+    if (s[1] === '0') return { kind: 'memory', freeBytes: Number(s.slice(2)) || null };
+    return { kind: 'other', code };
+  }
+  if (code === 2) return { kind: 'success' };
+  if (code >= 1 && code <= 9) return { kind: 'error', code };
+  return { kind: 'other', code };
+}
+
 export function isFitProDialInfoPacket(pkt) {
   return (
     pkt &&
