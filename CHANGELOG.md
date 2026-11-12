@@ -10,7 +10,7 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 ### Planned
 
 - Broader media list parsing robustness across firmware variants
-- Video / GIF push helpers in the manager UI
+- Confirm AVI (video) dial playback on hardware; tune flags/container if needed
 
 ### Fixed
 
@@ -23,7 +23,7 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 - **Live viewfinder (remote camera)** — stream the host camera to the badge over the product **`0x27`** realtime-preview path: start/stop, device start-response parsing, per-frame ATT chunking with configurable size, device end-command handling, and a camera-free **test-pattern** mode (`src/js/preview.js`, `src/js/extras.js`, `client.previewStart/SendFrame/Stop`)
 - **Device-initiated viewfinder** — when the badge opens its camera UI it sends the start response itself; the manager auto-starts streaming (no `PREVIEW_START`) and answers the end command. **Verified end-to-end on `BG02` (LJ733_MB_V1.5, fw `V35922`, 240×240)**: 200 B and 512 B chunks both work, frames render, and no per-frame ACK is needed (local GATT completion is sufficient). Viewfinder FPS/quality/chunk/toggles persist in `localStorage`
 - FitPro detection also matches `BG*` GAP names (e.g. `BG02`), skipping the Baji probe timeout
-- **Quick actions** — legacy MyWatch commands: sync time, find, step goal, user profile, realtime step, remote photo page / shutter, find phone, enter OTA mode, shutdown, factory reset (`src/js/commands.js`)
+- **Video / GIF push (FitPro dial)** — decode a GIF/WebP/APNG (`ImageDecoder`) or video (`<video>` + canvas) in the browser into JPEG frames, build an **MJPG AVI** (`src/js/avi.js`), and upload over the existing dial31 path with `dialType 1` (`fileType AVI`, same dial id `5538`). New "Push video / GIF" UI with size/FPS/duration controls. Containers/constants recovered from the SuperBand app (`WatchTheme3Body.setFileType(1)`, `VideoTool`); playback on hardware still to confirm- **Quick actions** — legacy MyWatch commands: sync time, find, step goal, user profile, realtime step, remote photo page / shutter, find phone, enter OTA mode, shutdown, factory reset (`src/js/commands.js`)
 - Debug console: product `0x27` preview + legacy settings buttons and builders
 - Docs: [`protocol/live-preview.md`](docs/protocol/live-preview.md) and [`protocol/legacy-commands.md`](docs/protocol/legacy-commands.md)
 - Clean-room firmware track: `docs/firmware-rewrite/`, `docs/protocol/firmware-contract.md`, portable dial31 scaffold `firmware/ac707n-open/`, `tools/map-fitpro-dispatch.py`, `tools/capture-dial-info.py`

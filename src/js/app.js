@@ -1,5 +1,11 @@
 import { SuperBandClient, FileType, FunctionType } from './client.js';
 import { prepareFileForBadge, formatBytes, DEFAULT_DIAL } from './image.js';
+import {
+  extractFramesForBadge,
+  buildAviFromFrames,
+  isSupportedVideoFile,
+  WATCH_VIDEO,
+} from './video.js';
 import { REPO_URL } from './protocol.js';
 import { bindAdvanced } from './advanced.js';
 import { bindExtras } from './extras.js';
@@ -10,6 +16,7 @@ const $$ = (s) => [...document.querySelectorAll(s)];
 const client = new SuperBandClient();
 let prepared = null;
 let transferring = false;
+let videoPrepared = null;
 
 function setPill(el, text, state = '') {
   el.textContent = text;
@@ -200,6 +207,8 @@ function updatePushChecklist() {
   const canPush = connected && imageReady && idle;
   $('#btnPush').disabled = !canPush;
   $('#btnPushAll').disabled = !(client.sessionCount >= 2 && imageReady && idle);
+  const isFitPro = client.getSnapshot?.().protocolMode === 'fitpro';
+  $('#btnPushVideo').disabled = !(connected && !!videoPrepared && idle && isFitPro);
 }
 
 function renderMediaList(items) {
@@ -424,6 +433,116 @@ async function pushAll() {
   }
 }
 
+async function rebuildVideoPreview() {
+  const file = $('#videoInput').files?.[0];
+  if (!file) {
+    videoPrepared = null;
+    $('#aviPreview').hidden = true;
+    $('#aviPlaceholder').hidden = false;
+    $('#videoMeta').textContent = 'No video selected.';
+    updatePushChecklist();
+    return;
+  }
+  if (!isSupportedVideoFile(file)) {
+    videoPrepared = null;
+    updatePushChecklist();
+    toast('Unsupported file — use GIF/WebP/APNG or an MP4/MOV/WebM video', 'err');
+    return;
+  }
+  try {
+    const width = Number($('#videoW').value) || 240;
+    const height = Number($('#videoH').value) || 240;
+    const fps = Number($('#videoFps').value) || WATCH_VIDEO.fps;
+    const result = await extractFramesForBadge(file, {
+      width,
+      height,
+      fps,
+      maxSeconds: Number($('#videoSeconds').value) || WATCH_VIDEO.maxSeconds,
+      round: $('#videoRound').checked,
+    });
+    videoPrepared = {
+      frames: result.frames,
+      width,
+      height,
+      fps,
+      source: result.source,
+      sourceFrames: result.sourceFrames,
+    };
+    const img = $('#aviPreview');
+    img.src = result.previewUrl;
+    img.hidden = false;
+    $('#aviPlaceholder').hidden = true;
+    $('#aviDial').classList.toggle('round', $('#videoRound').checked);
+    const src =
+      result.source === 'animated-image'
+        ? `${result.sourceFrames ?? result.frames.length}-frame image`
+        : `${result.duration ? `${result.duration.toFixed(1)}s` : 'video'}`;
+    $('#videoMeta').textContent =
+      `${file.name} (${src}) → ${result.frames.length} frames @ ${fps} fps · ${width}×${height}`;
+    updatePushChecklist();
+  } catch (e) {
+    videoPrepared = null;
+    updatePushChecklist();
+    toast(e.message, 'err');
+    log({ msg: `Video prepare: ${e.message}`, level: 'err' });
+  }
+}
+
+async function pushVideo() {
+  if (!client.connected) {
+    toast('Connect a badge first', 'err');
+    return;
+  }
+  if (!videoPrepared) {
+    toast('Choose a video or GIF first', 'err');
+    return;
+  }
+  if (client.getSnapshot?.().protocolMode !== 'fitpro') {
+    toast('Video push is FitPro-dial only for now', 'err');
+    return;
+  }
+  const bar = $('#aviBar');
+  const wrap = $('#aviProgress');
+  wrap.hidden = false;
+  bar.style.width = '0%';
+  transferring = true;
+  updatePushChecklist();
+  try {
+    const avi = buildAviFromFrames(videoPrepared.frames, {
+      width: videoPrepared.width,
+      height: videoPrepared.height,
+      fps: videoPrepared.fps,
+    });
+    log({
+      msg: `AVI ready — ${formatBytes(avi.length)} · ${videoPrepared.frames.length} frames ` +
+        `@ ${videoPrepared.fps} fps ${videoPrepared.width}×${videoPrepared.height}`,
+      level: 'info',
+    });
+    const result = await client.transferFile(avi, {
+      fileType: FileType.VIDEO,
+      dialType: 1, // AVI (WatchTheme3 fileType 1)
+      onProgress: (pct) => {
+        bar.style.width = `${pct}%`;
+      },
+    });
+    toast(`Video pushed to ${client.name || 'badge'} (dial31 AVI)`, 'ok');
+    log({
+      msg: `Video push complete → ${client.name || result.sessionId} ${formatBytes(avi.length)}`,
+      level: 'ok',
+    });
+    $('#mediaIdPill').textContent = 'FitPro dial31 (AVI)';
+  } catch (e) {
+    toast(e.message, 'err');
+    log({ msg: e.message, level: 'err' });
+  } finally {
+    transferring = false;
+    updatePushChecklist();
+    setTimeout(() => {
+      wrap.hidden = true;
+    }, 900);
+  }
+}
+
 function clearActiveUi() {
   renderSnapshot({
     name: null,
@@ -472,6 +591,14 @@ function bind() {
   $('#roundMask').addEventListener('change', () => rebuildPreview());
   $('#btnPush').addEventListener('click', () => pushImage());
   $('#btnPushAll').addEventListener('click', () => pushAll());
+  $('#btnPickVideo').addEventListener('click', () => $('#videoInput').click());
+  $('#videoInput').addEventListener('change', () => rebuildVideoPreview());
+  $('#videoW').addEventListener('change', () => rebuildVideoPreview());
+  $('#videoH').addEventListener('change', () => rebuildVideoPreview());
+  $('#videoFps').addEventListener('change', () => rebuildVideoPreview());
+  $('#videoSeconds').addEventListener('change', () => rebuildVideoPreview());
+  $('#videoRound').addEventListener('change', () => rebuildVideoPreview());
+  $('#btnPushVideo').addEventListener('click', () => pushVideo());
   $('#btnMediaList').addEventListener('click', () =>
     client.requestMediaList().catch((e) => {
       toast(e.message, 'err');

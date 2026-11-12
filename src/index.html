@@ -191,6 +191,62 @@
           </section>
 
           <section class="section" style="grid-column: 1 / -1">
+            <h2>Push video / GIF</h2>
+            <p class="lead">
+              Loop a short animation on the badge — decoded in the browser to an
+              <span class="mono">MJPG AVI</span> and uploaded over the FitPro dial31 path
+              (<span class="mono">fileType 1</span>). GIF / WebP / APNG use the browser's
+              image decoder; MP4 / MOV / WebM are sampled at the chosen FPS. Your badge
+              (<span class="mono">BG02</span>) reported a 240&times;240 display.
+            </p>
+            <div class="stack">
+              <div class="dial-stage">
+                <div class="dial round" id="aviDial">
+                  <div class="placeholder" id="aviPlaceholder">
+                    Choose a video or GIF<br />to preview
+                  </div>
+                  <img id="aviPreview" alt="" hidden />
+                </div>
+                <div class="row">
+                  <input
+                    class="file-input"
+                    id="videoInput"
+                    type="file"
+                    accept="video/*,image/gif,image/webp,image/apng,.gif,.webp,.apng,.mp4,.mov,.webm,.avi,.mkv"
+                  />
+                  <button type="button" id="btnPickVideo">Choose video / GIF</button>
+                  <button class="primary" data-need-conn disabled id="btnPushVideo">
+                    Push video
+                  </button>
+                </div>
+              </div>
+              <div class="row">
+                <label class="field">
+                  Width
+                  <input id="videoW" type="number" value="240" min="16" max="1024" />
+                </label>
+                <label class="field">
+                  Height
+                  <input id="videoH" type="number" value="240" min="16" max="1024" />
+                </label>
+                <label class="field">
+                  FPS
+                  <input id="videoFps" type="number" value="12" min="1" max="30" />
+                </label>
+                <label class="field">
+                  Max seconds
+                  <input id="videoSeconds" type="number" value="3" min="0.5" max="20" step="0.5" />
+                </label>
+              </div>
+              <label class="check"
+                ><input type="checkbox" id="videoRound" checked /> Round screen mask</label
+              >
+              <p class="lead" id="videoMeta">No video selected.</p>
+              <div class="progress" id="aviProgress" hidden><i id="aviBar"></i></div>
+            </div>
+          </section>
+
+          <section class="section" style="grid-column: 1 / -1">
             <h2>Live viewfinder</h2>
             <p class="lead">
               Stream your camera to the badge display &mdash; the <span class="mono">0x27</span>

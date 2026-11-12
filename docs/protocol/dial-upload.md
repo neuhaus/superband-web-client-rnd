@@ -85,14 +85,29 @@ Firmware / app `JpegRulesChecker` (+ TurboJPEG `subsample=0`) require:
 
 Browser `canvas.toBlob('image/jpeg')` typically emits **4:2:0 + ICC**. Use `src/js/jpeg444.js` when algorithm is `4`.
 
+### MJPG AVI (video / GIF)
+
+The Android app pushes video/GIF as a **looping MJPG AVI** through the *same* dial path — `WatchTheme3Body.setFileType(1)` (`VideoPushViewModel.uploadVideoWithWatchTheme` → `WatchThemeTransferManager.buildWatchTheme3BodyForVideo`). GIF/MP4/MOV/WMV/FLV/MKV are re-encoded to AVI first (`com.jieli.lib.video.tool.VideoTool`, FFmpegKit) before upload.
+
+| Field | Value |
+|-------|-------|
+| Start `dialType` byte | **`1`** = AVI (vs `0` RGB565 / `2` JPEG) |
+| dialId | **`5538`** — the *same* id the app uses for picture push (`R2.styleable.KeyTrigger_triggerId`) |
+| File blob | identical wrapper: `u32BE(aviLen) ‖ aviBytes` |
+| Sequence | identical `start(2) → data(1) → finish(3)` (chunk ACK flow unchanged) |
+
+Container is a standard **RIFF/AVI**, `vids`/`MJPG`: an `avih` main header, `strl` (`strh` handler `MJPG` + `strf` BITMAPINFOHEADER), a `movi` list of `00dc` chunks (one raw JPEG each), and an `idx1` index. `src/js/avi.js` builds it from decoded frames; `src/js/video.js` decodes GIF/WebP/APNG (`ImageDecoder`) and video (`<video>` + canvas) into JPEG frames.
+
+Whether the badge firmware *plays* an AVI dial is the open question: the protocol slots and the app code path exist, but it has not yet been confirmed on hardware.
+
 ## Upload sequence (custom background)
 
 Matches SuperBand `PicturePush` → `WatchThemeTransferManager` → `gh3` for a single custom background:
 
 1. Build file blob: `u32BE(imageLen) ‖ imageBytes` (RGB565 or JPEG)
 2. **Start** `0x1F` / cmd `2` with payload:
-   - `u32BE dialId` — app uses **`5538`** for processed picture push
-   - `u8 dialType` — `0` RGB565 / `2` JPEG
+   - `u32BE dialId` — app uses **`5538`** for processed picture push (and for video)
+   - `u8 dialType` — `0` RGB565 / `1` AVI video / `2` JPEG
    - `u8 flags` — `0x08` = custom-background only (bit pack from SDK `ks1.a`)
    - `RGB` 3 bytes (usually `00 00 00`)
    - `u32BE fileSize` — blob length
@@ -112,6 +127,8 @@ RGB565 ~259 KB ≈ **520** chunks at 498 B (faster than the old 180 B path
 |--------|------|
 | `src/js/fitpro.js` | FitPro builders + dial-info parse |
 | `src/js/client.js` | `transferDialFile()` when `protocolMode !== 'baji'` |
+| `src/js/avi.js` | MJPG AVI (RIFF) container builder for video dials |
+| `src/js/video.js` | GIF/WebP/APNG + video → JPEG frames |
 
 ## Related
 

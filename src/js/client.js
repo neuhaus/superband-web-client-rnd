@@ -496,11 +496,16 @@ class BadgeSession {
       mediaId = null,
       allocateId = true,
       onProgress = null,
+      /**
+       * FitPro dial payload type override: 0 = RGB565, 1 = AVI video, 2 = JPEG.
+       * Left null → derived from the dial info (images). Video push passes 1.
+       */
+      dialType = null,
     } = {},
   ) {
     if (this.previewActive) throw new Error('Live preview is running — stop it before pushing');
     if (this.protocolMode !== 'baji') {
-      return this.transferDialFile(fileBytes, { onProgress });
+      return this.transferDialFile(fileBytes, { onProgress, dialType });
     }
 
     if (this._transferring) throw new Error('Transfer already in progress on this badge');
@@ -615,7 +620,7 @@ class BadgeSession {
    * Android `gh3` pacing/ACKs; chunk size capped so each CD frame is one GATT write
    * (Web Bluetooth cannot safely stream mid-frame ATT fragments the way the Android stack does).
    */
-  async transferDialFile(fileBytes, { onProgress = null } = {}) {
+  async transferDialFile(fileBytes, { onProgress = null, dialType = null } = {}) {
     if (this._transferring) throw new Error('Transfer already in progress on this badge');
     if (this.previewActive) throw new Error('Live preview is running — stop it before pushing');
     if (!this.connected) throw new Error('Not connected');
@@ -627,28 +632,33 @@ class BadgeSession {
     try {
       // Do not send DIAL_INFO (0x20/2) — drops BJ-1. Default RGB565 + dialType 0.
       const info = this.dialInfo;
-      const dialType = info?.dialType ?? (info?.algorithm === 4 ? 2 : 0);
-      const expectJpeg = dialType === 2;
+      const resolvedType = dialType ?? info?.dialType ?? (info?.algorithm === 4 ? 2 : 0);
+      const isVideo = resolvedType === 1;
+      const expectJpeg = resolvedType === 2;
       const looksJpeg =
         fileBytes.length >= 3 && fileBytes[0] === 0xff && fileBytes[1] === 0xd8;
-      if (expectJpeg && !looksJpeg) {
-        throw new Error('Dial algorithm 4 expects JPEG 4:4:4 bytes; re-prepare image');
-      }
-      if (!expectJpeg && looksJpeg) {
-        throw new Error(
-          'FitPro badge expects RGB565 (dial type 0), not JPEG — re-select the image after connect',
-        );
+      // Video dials carry an MJPG AVI, not an image — skip the image format guards.
+      if (!isVideo) {
+        if (expectJpeg && !looksJpeg) {
+          throw new Error('Dial algorithm 4 expects JPEG 4:4:4 bytes; re-prepare image');
+        }
+        if (!expectJpeg && looksJpeg) {
+          throw new Error(
+            'FitPro badge expects RGB565 (dial type 0), not JPEG — re-select the image after connect',
+          );
+        }
       }
       const fileBlob = buildDialFileBlob(fileBytes);
       const attMax = this.ble?.maxWriteLength || 512;
       const chunkSize = dialChunkSize(info, attMax);
       const checksum = fitproByteSum(fileBlob);
       const totalChunks = Math.max(1, Math.ceil(fileBlob.length / chunkSize));
+      const kind = isVideo ? 'AVI' : expectJpeg ? 'JPEG' : 'RGB565';
 
       this._log(
-        `Dial31 size=${fileBlob.length} img=${fileBytes.length} ` +
+        `Dial31 size=${fileBlob.length} ${isVideo ? 'avi' : 'img'}=${fileBytes.length} ` +
           `chunk=${chunkSize} (atomic GATT, attMax=${attMax}) chunks=${totalChunks} ` +
-          `type=${dialType} ${expectJpeg ? 'JPEG' : 'RGB565'} pace=${FitPro.COMMAND_POOL_MS}ms`,
+          `type=${resolvedType} ${kind} pace=${FitPro.COMMAND_POOL_MS}ms`,
         'info',
       );
       this._emit('transfer', {
@@ -665,7 +675,7 @@ class BadgeSession {
 
       const startPayload = buildDialStartPayload({
         dialId: FitPro.PICTURE_DIAL_ID,
-        dialType,
+        dialType: resolvedType,
         fileSize: fileBlob.length,
       });
       await this.write(buildDialStart(startPayload), 'DIAL_START', writeOpts);
