@@ -12,12 +12,12 @@ import { buildMjpgAvi, DEFAULT_AVI } from './avi.js';
 
 export const WATCH_VIDEO = {
   fps: 12,
-  /** Clamp captured animation length (seconds). */
-  maxSeconds: 3,
+  /** Clamp captured animation length (seconds). Badge spec: videos under 5 s. */
+  maxSeconds: 5,
   /** JPEG quality per frame. */
   quality: 0.6,
-  /** Hard cap on frame count (upload size guard). */
-  maxFrames: 96,
+  /** Hard cap on frame count (upload size guard). 5 s @ 24 fps. */
+  maxFrames: 120,
 };
 
 const ANIMATED_EXT = /\.(gif|webp|apng|avif)$/i;

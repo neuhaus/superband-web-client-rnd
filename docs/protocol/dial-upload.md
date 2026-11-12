@@ -100,6 +100,8 @@ Container is a standard **RIFF/AVI**, `vids`/`MJPG`: an `avih` main header, `str
 
 Whether the badge firmware *plays* an AVI dial is the open question: the protocol slots and the app code path exist, but it has not yet been confirmed on hardware.
 
+Badge capacity (AliExpress listing for the LJ733 / `BG02`): 1.5″ **240×240** panel, **≈50 images**, **3 videos (each under 5 s)** and GIFs. Exceeding the video slots is expected to surface as the firmware's **status 6** ("theme count limit exceeded").
+
 ## Upload sequence (custom background)
 
 Matches SuperBand `PicturePush` → `WatchThemeTransferManager` → `gh3` for a single custom background:
