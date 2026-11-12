@@ -24,6 +24,7 @@ import {
   parseMediaIdResponse,
   parseAck,
   parseNack,
+  toHex,
 } from './protocol.js';
 import {
   FitPro,
@@ -97,6 +98,9 @@ class BadgeSession {
     this._fileId = 1n;
     this._waiters = new Map();
     this._transferring = false;
+    /** Trace dial-module packets during a transfer (quiet mode hides them). */
+    this._dialTrace = false;
+    this._dialTraceCount = 0;
     /** Live viewfinder (product 0x27) state. */
     this.previewActive = false;
     this.previewDims = null;
@@ -261,6 +265,15 @@ class BadgeSession {
         w.resolve(pkt);
         break;
       }
+    }
+
+    // Dial-transfer trace: surface the badge's replies even though quiet mode
+    // suppresses the normal per-packet logging.
+    if (this._dialTrace && this._dialTraceCount < 32) {
+      this._dialTraceCount++;
+      const mod = (pkt.moduleId ?? 0).toString(16).padStart(2, '0');
+      const cmd = (pkt.commandId ?? 0).toString(16);
+      this._log(`dial ← module=0x${mod} cmd=0x${cmd} payload=${toHex(pkt.payload || new Uint8Array())}`, 'info');
     }
   }
 
@@ -699,13 +712,19 @@ class BadgeSession {
         dialType: resolvedType,
         fileSize: fileBlob.length,
       });
-      await this.write(buildDialStart(startPayload), 'DIAL_START', writeOpts);
-      // gh3: wait status 1000 before first DATA (strict — no soft-continue).
-      await this._waitDialStatus(FitPro.STATUS_CHUNK_BASE, {
-        timeoutMs: FitPro.ACK_TIMEOUT_MS,
-        label: 'DIAL_START_ACK(1000)',
-        poll: true,
-      });
+      this._dialTrace = true;
+      this._dialTraceCount = 0;
+      try {
+        await this.write(buildDialStart(startPayload), 'DIAL_START', writeOpts);
+        // gh3: wait status 1000 before first DATA (strict — no soft-continue).
+        await this._waitDialStatus(FitPro.STATUS_CHUNK_BASE, {
+          timeoutMs: FitPro.ACK_TIMEOUT_MS,
+          label: 'DIAL_START_ACK(1000)',
+          poll: true,
+        });
+      } finally {
+        this._dialTrace = false;
+      }
       onProgress?.(5);
 
       for (let i = 0; i < totalChunks; i++) {
