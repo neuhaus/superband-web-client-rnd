@@ -282,6 +282,7 @@ export class RcspSession {
     this.onLog = onLog;
     this.sn = 0;
     this.authDone = false;
+    this._stopped = false;
 
     this._raw = []; // queued raw chunks (auth phase)
     this._rawWaiters = [];
@@ -298,21 +299,36 @@ export class RcspSession {
   }
 
   stop() {
+    if (this._stopped) return;
+    this._stopped = true;
     try {
       this.notifyChar.removeEventListener('characteristicvaluechanged', this._onValue);
     } catch {
       /* ignore */
     }
     try {
-      this.notifyChar.stopNotifications?.();
+      // stopNotifications() returns a Promise that rejects if the GATT link is
+      // already gone — swallow it (a sync try/catch won't catch that).
+      const p = this.notifyChar.stopNotifications?.();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
     } catch {
       /* ignore */
+    }
+    // Fail any in-flight waiters so callers don't hang.
+    for (const w of this._frameWaiters.splice(0)) {
+      clearTimeout(w.timer);
+      w.reject?.(new Error('RCSP session stopped'));
+    }
+    for (const w of this._rawWaiters.splice(0)) {
+      clearTimeout(w.timer);
+      w.reject?.(new Error('RCSP session stopped'));
     }
   }
 
   // ── Notification handling ────────────────────────────────────────────────
 
   _onNotify(chunk) {
+    if (this._stopped) return;
     if (!this.authDone) {
       // Deliver to the first matching raw waiter, else queue for later.
       for (let i = 0; i < this._rawWaiters.length; i++) {
@@ -379,7 +395,7 @@ export class RcspSession {
     const idx = this._raw.findIndex(pred);
     if (idx >= 0) return Promise.resolve(this._raw.splice(idx, 1)[0]);
     return new Promise((resolve, reject) => {
-      const w = { pred, resolve };
+      const w = { pred, resolve, reject };
       w.timer = setTimeout(() => {
         const i = this._rawWaiters.indexOf(w);
         if (i >= 0) this._rawWaiters.splice(i, 1);
@@ -392,7 +408,7 @@ export class RcspSession {
   _waitFrame(timeoutMs) {
     if (this._frameQueue.length) return Promise.resolve(this._frameQueue.shift());
     return new Promise((resolve, reject) => {
-      const w = { resolve };
+      const w = { resolve, reject };
       w.timer = setTimeout(() => {
         const i = this._frameWaiters.indexOf(w);
         if (i >= 0) this._frameWaiters.splice(i, 1);
