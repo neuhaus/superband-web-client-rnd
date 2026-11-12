@@ -99,6 +99,8 @@ Once authenticated on `BG02`: external-flash `op 12` returns free space in **KiB
 
 Transfer can return status `2` for a wrong encode (e.g. JPEG as type `2` on a type-`0` device) while the screen stays **black**. Prefer RGB565 unless algorithm `4` is known.
 
+> **Pick the format from the device, not a guess.** Send `0x20`/`2` (dial info) first — the reply carries `width`, `height`, `config` and `algorithm`. **`algorithm == 4` → the dial must be JPEG** (dialType `2`); otherwise RGB565 (dialType `0`). Using RGB565 on an algorithm-4 badge (e.g. `BG02`) uploads cleanly and ACKs, but renders **black**. `BG02` reports `240×240, config 7, algorithm 4, shortPkgLength 5000` (`mchModel K66`, `mainModel LJ733`). The manager reads dial info once when preparing an image and encodes accordingly.
+
 ### JPEG rules (algorithm `4` only)
 
 Firmware / app `JpegRulesChecker` (+ TurboJPEG `subsample=0`) require:
