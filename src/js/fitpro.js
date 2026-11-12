@@ -16,6 +16,8 @@ export const FitPro = {
     DATA: 1,
     START: 2,
     FINISH: 3,
+    DELETE: 4,
+    SWITCH: 5,
   },
   InfoCmd: {
     STATUS: 1,
@@ -172,6 +174,37 @@ export function buildDialStatusRequest() {
 /** Free-space query: module `0x20` / key `4` (SDK `getDialWatchRemainSpace`). */
 export function buildDialRemainSpaceRequest() {
   return buildFitProFrame(FitPro.DIAL_INFO_MODULE, 4);
+}
+
+/** List stored faces/videos: module `0x20` / key `3` (SDK `getDialWatchList`). */
+export function buildDialListRequest() {
+  return buildFitProFrame(FitPro.DIAL_INFO_MODULE, 3);
+}
+
+/** Delete a stored face/video by dial id: module `0x1F` / cmd `4`, `u32BE(id)`. */
+export function buildDialDelete(dialId) {
+  const p = new Uint8Array(4);
+  putU32BE(p, 0, Number(dialId) >>> 0);
+  return buildFitProFrame(FitPro.DIAL_MODULE, FitPro.DialCmd.DELETE, p);
+}
+
+/** Switch to a stored face/video by dial id: module `0x1F` / cmd `5`, `u32BE(id)`. */
+export function buildDialSwitch(dialId) {
+  const p = new Uint8Array(4);
+  putU32BE(p, 0, Number(dialId) >>> 0);
+  return buildFitProFrame(FitPro.DIAL_MODULE, FitPro.DialCmd.SWITCH, p);
+}
+
+/**
+ * Best-effort decode of the dial-list (`0x20`/`3`) payload.
+ * Layout is not fully documented; returns a readable summary and, when
+ * plausible, `{ id }` entries. Callers should keep the raw hex too.
+ * @param {Uint8Array} payload
+ */
+export function describeDialList(payload) {
+  if (!payload || !payload.length) return 'empty';
+  const hex = [...payload].map((b) => b.toString(16).padStart(2, '0')).join(' ');
+  return `raw (${payload.length} B): ${hex}`;
 }
 
 /**

@@ -63,6 +63,17 @@ Request polls; response payload is **u32BE status**:
 
 > The `1000…` and `100000000…` bands are the ones the badge actually uses during an upload; the `1`–`9` codes arrive as terminal results. Observed on `BG02`: a video whose blob exceeded free space was refused with `06 01 E4 AC` = `100786348` = "1010, **786 348 B free**".
 
+### Managing stored faces / videos (read + delete)
+
+| Op | Frame | Notes |
+|----|-------|-------|
+| List | `CD 00 05 20 01 03 00 00` (`0x20`/`3`) | reply layout not fully documented — treat as raw |
+| Free space | `CD 00 05 20 01 04 00 00` (`0x20`/`4`) | reply = byte count (u64 BE) |
+| Delete | `CD 00 09 1F 01 04 00 04 <id u32BE>` (`0x1F`/`4`) | id = watch/dial id (e.g. `5538` = `00 00 15 A2`) |
+| Switch | `CD 00 09 1F 01 05 00 04 <id u32BE>` (`0x1F`/`5`) | make a stored dial active |
+
+There is **no documented read-back of the stored image/video bytes** on the FitPro path — the dial protocol is write-oriented. (Asset download exists only on the Baji `0x02` module, which these badges don't implement.) The manager exposes list/delete/switch in the **Faces / videos on the badge** panel.
+
 ## Payload formats
 
 ### RGB565 (default for BJ-1 / DG01)

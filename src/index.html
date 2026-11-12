@@ -260,6 +260,36 @@
             </div>
           </section>
 
+          <section class="section">
+            <h2>Faces / videos on the badge</h2>
+            <p class="lead">
+              List what the badge is storing (dial list,
+              <span class="mono">0x20/3</span>) — the payload is shown raw because the layout
+              isn't fully documented. Delete an entry by dial id
+              (<span class="mono">0x1F/4</span>) to free space, or switch to it
+              (<span class="mono">0x1F/5</span>). Deleting is permanent.
+            </p>
+            <div class="stack">
+              <div class="row">
+                <button data-need-conn disabled id="btnDialList">List faces / videos</button>
+                <label class="field">
+                  Dial ID
+                  <input id="dialDeleteId" type="number" min="0" step="1" placeholder="5538" />
+                </label>
+                <button data-need-conn disabled id="btnDialSwitch">Switch</button>
+                <button class="danger" data-need-conn disabled id="btnDialDelete">
+                  Delete dial
+                </button>
+              </div>
+              <pre
+                class="lead mono"
+                id="dialListOut"
+                hidden
+                style="white-space: pre-wrap; word-break: break-all"
+              ></pre>
+            </div>
+          </section>
+
           <section class="section" style="grid-column: 1 / -1">
             <h2>Live viewfinder</h2>
             <p class="lead">

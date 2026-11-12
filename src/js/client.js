@@ -32,6 +32,10 @@ import {
   buildDialStatusRequest,
   buildDialRemainSpaceRequest,
   parseDialRemainSpace,
+  buildDialListRequest,
+  buildDialDelete,
+  buildDialSwitch,
+  describeDialList,
   buildDialStart,
   buildDialStartPayload,
   buildDialDataChunk,
@@ -565,6 +569,50 @@ class BadgeSession {
     this._log(`Dial free space ← ${raw} → ${bytes == null ? '?' : bytes} bytes`, 'info');
     this.hub._emitSnapshot();
     return { bytes, raw };
+  }
+
+  /** List stored faces/videos (module 0x20 / key 3). Returns the raw payload. */
+  async dialList({ timeoutMs = 4000 } = {}) {
+    if (!this.connected) throw new Error('Not connected');
+    const pending = this._waitFor(
+      (p) =>
+        (p.moduleId === FitPro.DIAL_INFO_MODULE || p.moduleKey === FitPro.DIAL_INFO_MODULE) &&
+        (p.commandId === 3 || p.command === 3),
+      { timeoutMs, label: 'DIAL_LIST' },
+    );
+    await this.write(buildDialListRequest(), 'DIAL_LIST');
+    const pkt = await pending;
+    const payload = pkt.payload || new Uint8Array();
+    const raw = toHex(payload);
+    this._log(`Dial list ← ${raw}`, 'info');
+    return { raw, payload, summary: describeDialList(payload) };
+  }
+
+  /**
+   * Delete a stored face/video by dial id (module 0x1F / cmd 4).
+   * Best-effort: sends the command; resolves once the GATT write completes.
+   */
+  async dialDelete(dialId, { timeoutMs = 4000 } = {}) {
+    if (!this.connected) throw new Error('Not connected');
+    if (this._transferring) throw new Error('Transfer in progress — try again in a moment');
+    const ack = this._waitFor(
+      (p) =>
+        (p.moduleId === FitPro.DIAL_MODULE || p.moduleKey === FitPro.DIAL_MODULE) ||
+        (p.moduleId === FitPro.DIAL_INFO_MODULE || p.moduleKey === FitPro.DIAL_INFO_MODULE),
+      { timeoutMs, label: 'DIAL_DELETE_ACK' },
+    ).catch(() => null);
+    await this.write(buildDialDelete(dialId), 'DIAL_DELETE');
+    const pkt = await ack;
+    const reply = pkt ? toHex(pkt.payload || new Uint8Array()) : '(no reply)';
+    this._log(`Dial delete id=${dialId} ← ${reply}`, 'info');
+    return { raw: reply };
+  }
+
+  /** Switch to a stored face/video by dial id (module 0x1F / cmd 5). */
+  async dialSwitch(dialId) {
+    if (!this.connected) throw new Error('Not connected');
+    await this.write(buildDialSwitch(dialId), 'DIAL_SWITCH');
+    return { id: dialId };
   }
 
   async transferFile(
@@ -1193,6 +1241,18 @@ export class SuperBandClient extends EventTarget {
 
   async dialRemainSpace(opts) {
     return this._requireActive().dialRemainSpace(opts);
+  }
+
+  async dialList(opts) {
+    return this._requireActive().dialList(opts);
+  }
+
+  async dialDelete(dialId, opts) {
+    return this._requireActive().dialDelete(dialId, opts);
+  }
+
+  async dialSwitch(dialId) {
+    return this._requireActive().dialSwitch(dialId);
   }
 
   async transferFile(fileBytes, opts) {

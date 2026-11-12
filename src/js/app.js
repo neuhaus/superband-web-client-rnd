@@ -489,6 +489,56 @@ async function rebuildVideoPreview() {
   }
 }
 
+async function listDials() {
+  if (!client.connected) {
+    toast('Connect a badge first', 'err');
+    return;
+  }
+  const out = $('#dialListOut');
+  try {
+    const { raw, payload, summary } = await client.dialList();
+    out.hidden = false;
+    out.textContent = `dial list (0x20/3) — ${payload.length} B\n${summary}`;
+    log({ msg: `Dial list ← ${raw}`, level: 'info' });
+  } catch (e) {
+    toast(e.message, 'err');
+    log({ msg: `Dial list: ${e.message}`, level: 'err' });
+  }
+}
+
+async function deleteDial() {
+  const id = Number($('#dialDeleteId').value);
+  if (!Number.isFinite(id) || id < 0) {
+    toast('Enter a dial id (use List first)', 'err');
+    return;
+  }
+  if (!window.confirm(`Delete dial id ${id} from the badge? This cannot be undone.`)) return;
+  try {
+    await client.dialDelete(id);
+    toast(`Delete sent for dial ${id}`, 'ok');
+    log({ msg: `Dial delete sent → id ${id}`, level: 'ok' });
+  } catch (e) {
+    toast(e.message, 'err');
+    log({ msg: e.message, level: 'err' });
+  }
+}
+
+async function switchDial() {
+  const id = Number($('#dialDeleteId').value);
+  if (!Number.isFinite(id) || id < 0) {
+    toast('Enter a dial id (use List first)', 'err');
+    return;
+  }
+  try {
+    await client.dialSwitch(id);
+    toast(`Switch sent for dial ${id}`, 'ok');
+    log({ msg: `Dial switch sent → id ${id}`, level: 'ok' });
+  } catch (e) {
+    toast(e.message, 'err');
+    log({ msg: e.message, level: 'err' });
+  }
+}
+
 async function queryVideoFreeSpace() {
   if (!client.connected) {
     toast('Connect a badge first', 'err');
@@ -641,6 +691,9 @@ function bind() {
   $('#videoRound').addEventListener('change', () => rebuildVideoPreview());
   $('#btnPushVideo').addEventListener('click', () => pushVideo());
   $('#btnVideoFreeSpace').addEventListener('click', () => queryVideoFreeSpace());
+  $('#btnDialList').addEventListener('click', () => listDials());
+  $('#btnDialDelete').addEventListener('click', () => deleteDial());
+  $('#btnDialSwitch').addEventListener('click', () => switchDial());
   $('#btnMediaList').addEventListener('click', () =>
     client.requestMediaList().catch((e) => {
       toast(e.message, 'err');
