@@ -169,6 +169,29 @@ export function buildDialStatusRequest() {
   return buildFitProFrame(FitPro.DIAL_INFO_MODULE, FitPro.InfoCmd.STATUS);
 }
 
+/** Free-space query: module `0x20` / key `4` (SDK `getDialWatchRemainSpace`). */
+export function buildDialRemainSpaceRequest() {
+  return buildFitProFrame(FitPro.DIAL_INFO_MODULE, 4);
+}
+
+/**
+ * Dial free-space response payload. SDK parses it as a long (`bytesToLong`),
+ * so expect 8 bytes big-endian; fall back to u32BE on short payloads.
+ * @param {Uint8Array} payload
+ * @returns {number|null}
+ */
+export function parseDialRemainSpace(payload) {
+  if (!payload || !payload.length) return null;
+  if (payload.length >= 8) {
+    let v = 0n;
+    for (let i = 0; i < 8; i++) v = (v << 8n) | BigInt(payload[i] & 0xff);
+    const n = Number(v);
+    return Number.isSafeInteger(n) ? n : null;
+  }
+  if (payload.length >= 4) return getU32BE(payload, 0);
+  return null;
+}
+
 /** Short legacy probe: CD 00 05 1A 01 {cmd} 00 00 */
 export function buildLegacyProbe(cmd) {
   return buildFitProFrame(FitPro.LEGACY_MODULE, cmd);

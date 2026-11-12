@@ -489,6 +489,22 @@ async function rebuildVideoPreview() {
   }
 }
 
+async function queryVideoFreeSpace() {
+  if (!client.connected) {
+    toast('Connect a badge first', 'err');
+    return null;
+  }
+  try {
+    const { bytes, raw } = await client.dialRemainSpace();
+    const txt = bytes == null ? `raw ${raw}` : formatBytes(bytes);
+    $('#videoMeta').textContent = `Badge free dial space: ${txt}`;
+    return bytes;
+  } catch (e) {
+    log({ msg: `Free-space query: ${e.message}`, level: 'warn' });
+    return null;
+  }
+}
+
 async function pushVideo() {
   if (!client.connected) {
     toast('Connect a badge first', 'err');
@@ -509,8 +525,20 @@ async function pushVideo() {
   transferring = true;
   updatePushChecklist();
   try {
-    const maxKb = Number($('#videoMaxKb').value) || Math.round(WATCH_VIDEO.maxBytes / 1024);
-    const maxBytes = maxKb * 1024;
+    const userMaxKb = Number($('#videoMaxKb').value) || Math.round(WATCH_VIDEO.maxBytes / 1024);
+    let maxBytes = userMaxKb * 1024;
+    // If the badge tells us its free dial space, never exceed it (keep a margin).
+    const free = await queryVideoFreeSpace();
+    if (free != null && free > 0) {
+      const usable = free - 16 * 1024;
+      if (usable > 0 && usable < maxBytes) {
+        maxBytes = usable;
+        log({
+          msg: `Budget lowered to badge free space — ${formatBytes(maxBytes)}`,
+          level: 'info',
+        });
+      }
+    }
     const fit = await fitAvi(videoPrepared.sources, {
       width: videoPrepared.width,
       height: videoPrepared.height,
@@ -520,13 +548,14 @@ async function pushVideo() {
     const avi = fit.avi;
     log({
       msg:
-        `AVI ready — ${formatBytes(avi.length)} (budget ${maxKb} KB) · ${fit.frameCount} frames ` +
-        `@ ${fit.fps} fps q${fit.quality} ${videoPrepared.width}×${videoPrepared.height}`,
+        `AVI ready — ${formatBytes(avi.length)} (budget ${Math.round(maxBytes / 1024)} KB) · ` +
+        `${fit.frameCount} frames @ ${fit.fps} fps q${fit.quality} ` +
+        `${videoPrepared.width}×${videoPrepared.height}`,
       level: 'info',
     });
     if (avi.length > maxBytes) {
       log({
-        msg: `AVI still over budget (${formatBytes(avi.length)} > ${maxKb} KB) — badge may refuse it`,
+        msg: `AVI still over budget (${formatBytes(avi.length)} > ${formatBytes(maxBytes)}) — badge may refuse it`,
         level: 'warn',
       });
     }
@@ -611,6 +640,7 @@ function bind() {
   $('#videoSeconds').addEventListener('change', () => rebuildVideoPreview());
   $('#videoRound').addEventListener('change', () => rebuildVideoPreview());
   $('#btnPushVideo').addEventListener('click', () => pushVideo());
+  $('#btnVideoFreeSpace').addEventListener('click', () => queryVideoFreeSpace());
   $('#btnMediaList').addEventListener('click', () =>
     client.requestMediaList().catch((e) => {
       toast(e.message, 'err');

@@ -30,6 +30,8 @@ import {
   FitPro,
   buildDialInfoRequest,
   buildDialStatusRequest,
+  buildDialRemainSpaceRequest,
+  parseDialRemainSpace,
   buildDialStart,
   buildDialStartPayload,
   buildDialDataChunk,
@@ -518,10 +520,11 @@ class BadgeSession {
         if (info.kind === 'memory') {
           this.dialFreeBytes = info.freeBytes;
           this.hub._emitSnapshot();
-          const free = info.freeBytes != null ? `~${Math.round(info.freeBytes / 1024)} KB free` : 'out of space';
-          const need = sizeBytes != null ? ` (file is ${Math.round(sizeBytes / 1024)} KB)` : '';
+          const reported = info.freeBytes != null ? info.freeBytes : '?';
+          const need = sizeBytes != null ? `, file is ${Math.round(sizeBytes / 1024)} KB` : '';
           const err = new Error(
-            `Badge storage too small — it reports ${free}${need}. Free space (delete a face/video) or shrink the video.`,
+            `Badge refused the dial for space — status 1010, value ${reported}${need}. ` +
+              `It is nearly full: delete a face/video, or use "Query free space" and shrink the video.`,
           );
           err.dialError = true;
           err.dialMemoryFree = info.freeBytes;
@@ -540,6 +543,28 @@ class BadgeSession {
 
   async queryTransferStatus() {
     await this.write(buildStatusQuery(), 'STATUS');
+  }
+
+  /**
+   * Ask the badge how much dial storage is free (module 0x20 / key 4).
+   * @returns {Promise<{bytes:number|null, raw:string}>}
+   */
+  async dialRemainSpace({ timeoutMs = 4000 } = {}) {
+    if (!this.connected) throw new Error('Not connected');
+    const pending = this._waitFor(
+      (p) =>
+        (p.moduleId === FitPro.DIAL_INFO_MODULE || p.moduleKey === FitPro.DIAL_INFO_MODULE) &&
+        (p.commandId === 4 || p.command === 4),
+      { timeoutMs, label: 'DIAL_REMAIN_SPACE' },
+    );
+    await this.write(buildDialRemainSpaceRequest(), 'DIAL_REMAIN_SPACE');
+    const pkt = await pending;
+    const raw = toHex(pkt.payload || new Uint8Array());
+    const bytes = parseDialRemainSpace(pkt.payload);
+    this.dialFreeBytes = bytes;
+    this._log(`Dial free space ← ${raw} → ${bytes == null ? '?' : bytes} bytes`, 'info');
+    this.hub._emitSnapshot();
+    return { bytes, raw };
   }
 
   async transferFile(
@@ -1164,6 +1189,10 @@ export class SuperBandClient extends EventTarget {
 
   async queryTransferStatus() {
     return this._requireActive().queryTransferStatus();
+  }
+
+  async dialRemainSpace(opts) {
+    return this._requireActive().dialRemainSpace(opts);
   }
 
   async transferFile(fileBytes, opts) {

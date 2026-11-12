@@ -103,7 +103,7 @@ Container is a standard **RIFF/AVI**, `vids`/`MJPG`: an `avih` main header, `str
 
 The badge CPU is a **JieLi AC7076** ("7076 low power") — the same e-badge class as `samascience/ebadge` (BW03 / AC7076A) and the E01 units, whose firmware accepts **baseline JFIF stills or MJPEG-in-AVI**. That corroborates the container choice.
 
-**Storage is the practical limit:** these badges often have well under 1 MB free, and a dial that exceeds free space is **refused at the start** with the `1e8`-band status (no `1000` ACK). The manager auto-tunes JPEG quality then frame rate to meet a *size budget* and reports the badge's free bytes on refusal. Live free space can be queried with `0x20`/cmd `4` (`getDialWatchRemainSpace`).
+**Storage is the practical limit:** these badges often have little dial space free, and a dial that exceeds it is **refused at the start** with the `1e8`-band status (no `1000` ACK). The exact free space can be queried with **`0x20`/cmd `4`** (`getDialWatchRemainSpace` → `CD 00 05 20 01 04 00 00`; reply is the byte count). The manager queries it before a video push, clamps its *size budget* to it, and auto-tunes JPEG quality then frame rate (`fitAvi`). On `BG02`, four refusals decoded to a **~106 KB** free figure that barely moved — i.e. the badge was nearly full, and the "free" byte count in the status is unreliable (it tracks the file size), so the explicit `0x20`/`4` query is preferred.
 
 Whether the badge firmware *plays* an AVI dial is the open question: the protocol slots and the app code path exist, but it has not yet been confirmed on hardware.
 
