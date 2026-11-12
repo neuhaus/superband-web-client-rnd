@@ -41,6 +41,39 @@ export function bindExtras(ctx) {
     return Math.min(hi, Math.max(lo, v));
   }
 
+  const LIVE_SETTINGS_KEY = 'superband.live.settings';
+
+  function loadLiveSettings() {
+    try {
+      const s = JSON.parse(localStorage.getItem(LIVE_SETTINGS_KEY) || 'null');
+      if (!s) return;
+      if (s.fps != null && $('#liveFps')) $('#liveFps').value = s.fps;
+      if (s.quality != null && $('#liveQuality')) $('#liveQuality').value = s.quality;
+      if (s.chunk != null && $('#liveChunk')) $('#liveChunk').value = s.chunk;
+      if (s.testPattern != null && $('#liveTestPattern')) $('#liveTestPattern').checked = !!s.testPattern;
+      if (s.autoStart != null && $('#liveAutoStart')) $('#liveAutoStart').checked = !!s.autoStart;
+    } catch {
+      /* ignore malformed settings */
+    }
+  }
+
+  function saveLiveSettings() {
+    try {
+      localStorage.setItem(
+        LIVE_SETTINGS_KEY,
+        JSON.stringify({
+          fps: $('#liveFps')?.value,
+          quality: $('#liveQuality')?.value,
+          chunk: $('#liveChunk')?.value,
+          testPattern: testPattern(),
+          autoStart: autoStart(),
+        }),
+      );
+    } catch {
+      /* storage unavailable */
+    }
+  }
+
   function setLiveMeta(text, state = '') {
     const el = $('#liveMeta');
     if (!el) return;
@@ -241,7 +274,12 @@ export function bindExtras(ctx) {
   $('#btnLiveStop')?.addEventListener('click', () => stopPreview({ respond: false }));
   $('#liveTestPattern')?.addEventListener('change', () => {
     if (!testPattern()) stopCamera();
+    saveLiveSettings();
   });
+  $('#liveAutoStart')?.addEventListener('change', saveLiveSettings);
+  for (const id of ['#liveFps', '#liveQuality', '#liveChunk']) {
+    $(id)?.addEventListener('change', saveLiveSettings);
+  }
 
   // Device asked us to start/stop (badge opened/closed its camera UI).
   client.addEventListener('preview', (e) => {
@@ -355,6 +393,7 @@ export function bindExtras(ctx) {
   });
 
   window.addEventListener('pagehide', () => stopPreview({ respond: false, quiet: true }));
+  loadLiveSettings();
   updateLiveButtons();
   renderStats();
 }

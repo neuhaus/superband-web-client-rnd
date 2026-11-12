@@ -139,8 +139,11 @@ transport in `BadgeSession.previewStart` / `previewSendFrame` / `previewStop`
   sending `PREVIEW_START` (toggle: *Auto-start when the badge requests it*) and
   answers the device end command automatically.
 - **Chunk size matters**: Web Bluetooth does not expose the negotiated MTU. The
-  manager defaults to 200-byte chunks; lower it if frames stall on firmware with
-  a small ATT MTU. 512 is the browser maximum.
+  manager defaults to 200-byte chunks (lower it if frames stall on firmware with a
+  small ATT MTU). **512-byte chunks are verified working on `BG02`** and cut
+  fragmentation roughly 2.5× (a 6.1 KB frame → 13 ATT writes vs 32 at 200 B); 512
+  is the browser maximum. The chosen FPS / quality / chunk / toggles are
+  remembered in `localStorage`.
 - Stop the phone app first — it holds the badge's only LE link.
 
 ## Verified on hardware
@@ -166,8 +169,8 @@ app → dev : aa bb cc dd ee ff 00 00 00 00 ff ee dd cc bb aa   stop
 
 - **No per-frame ACK is required** — local GATT write completion is sufficient
   flow control (the badge did not notify per frame).
-- **200-byte chunks work** on this firmware (1–6 KB JPEG frames → 6–32 ATT
-  writes each); the badge rendered the stream.
+- **Chunk size**: **200 B and 512 B both work**; 512 reduces ATT fragmentation
+  (6.1 KB frame → 13 writes at 512 B vs 32 at 200 B).
 - The badge reports its size in the (device-initiated) start response; here
   **240×240**.
 - Exiting the badge's viewfinder app produces the end command even if the host
@@ -177,4 +180,3 @@ app → dev : aa bb cc dd ee ff 00 00 00 00 ff ee dd cc bb aa   stop
 
 - Whether all firmware accepts preview frames on `7E400002`, or a vendor service
   (`0x3802` / `4A02`) on some units (unconfirmed; `BG02` uses the UART write char).
-- Whether a larger chunk than 200 B is accepted on higher-MTU firmware.
