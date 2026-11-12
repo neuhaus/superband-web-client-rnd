@@ -217,6 +217,9 @@ function renderSnapshot(snap) {
     $('#mediaIdPill').textContent = 'Media ID —';
   }
 
+  const banner = $('#unknownBanner');
+  if (banner) banner.hidden = !(s.connected && s.unrecognized);
+
   syncProtocolUi();
 }
 
@@ -884,9 +887,26 @@ function bind() {
   $('#btnVideoFreeSpace').addEventListener('click', () => queryVideoFreeSpace());
   $('#btnDialList').addEventListener('click', () => listDials());
   $('#btnDialPresetList').addEventListener('click', () => listPresetDials());
-  $('#btnRcspProbe').addEventListener('click', () => rcspProbe());
-  $('#btnRcspList').addEventListener('click', () => listFacesRcsp());
+  $('#btnRcspProbe').addEventListener('click', () => rcspProbe());  $('#btnRcspList').addEventListener('click', () => listFacesRcsp());
   $('#btnRcspReadPath').addEventListener('click', () => downloadPath());
+  $('#btnForceFitPro').addEventListener('click', () =>
+    client
+      .setProtocolMode('fitpro')
+      .then(() => {
+        renderSnapshot();
+        toast('Treating device as FitPro', 'ok');
+      })
+      .catch((e) => toast(e.message, 'err')),
+  );
+  $('#btnForceBaji').addEventListener('click', () =>
+    client
+      .setProtocolMode('baji')
+      .then(() => {
+        renderSnapshot();
+        toast('Treating device as Baji', 'ok');
+      })
+      .catch((e) => toast(e.message, 'err')),
+  );
   $('#btnDialDelete').addEventListener('click', () => deleteDial());
   $('#btnDialSwitch').addEventListener('click', () => switchDial());
   $('#btnMediaList').addEventListener('click', () =>

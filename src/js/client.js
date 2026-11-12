@@ -111,6 +111,9 @@ class BadgeSession {
     this.mediaList = null;
     /** @type {'unknown'|'baji'|'fitpro'} */
     this.protocolMode = 'unknown';
+    /** True when the connected device exposed a UART service but didn't identify
+     * as a SuperBand badge (we then optimistically assume FitPro). */
+    this.unrecognized = false;
     this.dialInfo = null;
     this._fileId = 1n;
     this._waiters = new Map();
@@ -163,6 +166,7 @@ class BadgeSession {
         baji.protocolVersion ||
         (this.protocolMode === 'fitpro' ? 'FitPro dial31' : this.protocolMode === 'baji' ? 'Baji' : null),
       protocolMode: this.protocolMode,
+      unrecognized: this.unrecognized,
       battery: this.battery,
       freeStorage: baji.freeStorage ?? null,
       storageCapacity: baji.storageCapacity ?? null,
@@ -311,6 +315,7 @@ class BadgeSession {
           this.mediaList = null;
           this.dialInfo = null;
           this.protocolMode = 'unknown';
+          this.unrecognized = false;
           // Only drop the hub entry if this object still owns that id
           // (avoids wiping an existing session when a duplicate picker result is discarded).
           this.hub._onSessionLost(this.id, this);
@@ -357,12 +362,38 @@ class BadgeSession {
       this.protocolMode = 'baji';
       this._log('Protocol: Baji (media/file modules)', 'ok');
     } catch (e) {
+      // Optimistic fallback: assume FitPro so the controls still do something.
       this.protocolMode = 'fitpro';
-      this._log(
-        `Baji device info unavailable (${e.message}) — FitPro dial path (no dial-info probe)`,
-        'warn',
-      );
+      if (!looksLikeFitProBadge(this.name)) {
+        this.unrecognized = true;
+        this._log(
+          `Device did not identify as a SuperBand badge (name "${this.name || '?'}", Baji info failed: ${e.message}). Assuming FitPro — commands may time out.`,
+          'warn',
+        );
+      } else {
+        this._log(
+          `Baji device info unavailable (${e.message}) — FitPro dial path (no dial-info probe)`,
+          'warn',
+        );
+      }
       if (this.connected) await this._fitProHandshake();
+    }
+    this.hub._emitSnapshot();
+    return this.getSnapshot();
+  }
+
+  /** Manually override the detected protocol (for unrecognized devices). */
+  async setProtocolMode(mode) {
+    this.protocolMode = mode === 'baji' ? 'baji' : 'fitpro';
+    this.unrecognized = false;
+    this._log(`Protocol override → ${this.protocolMode}`, 'warn');
+    if (this.connected) {
+      try {
+        if (this.protocolMode === 'fitpro') await this._fitProHandshake();
+        else await this.refreshDeviceInfo({ timeoutMs: 6000 });
+      } catch (e) {
+        this._log(`Override handshake failed: ${e.message}`, 'warn');
+      }
     }
     this.hub._emitSnapshot();
     return this.getSnapshot();
@@ -1384,6 +1415,10 @@ export class SuperBandClient extends EventTarget {
 
   async rcspStorage(opts) {
     return this._requireActive().rcspStorage(opts);
+  }
+
+  async setProtocolMode(mode) {
+    return this._requireActive().setProtocolMode(mode);
   }
 
   async rcspDownload(entry, opts) {

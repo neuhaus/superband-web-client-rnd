@@ -104,6 +104,17 @@
               At-a-glance identity from GATT Device Information + battery; storage from Baji when
               the badge answers.
             </p>
+            <div class="warn-banner" id="unknownBanner" hidden>
+              <div>
+                <strong>Unrecognized device.</strong>
+                It exposes the badge UART service but didn't identify as a SuperBand badge, so it's
+                being treated as <span class="mono">FitPro</span>. Commands may time out.
+              </div>
+              <div class="row">
+                <button type="button" id="btnForceFitPro">Treat as FitPro</button>
+                <button type="button" id="btnForceBaji">Treat as Baji</button>
+              </div>
+            </div>
             <div class="stack">
               <div class="stats" id="deviceStats">
                 <div class="stat">

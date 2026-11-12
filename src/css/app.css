@@ -872,6 +872,23 @@ input[type='number'] {
 }
 
 /* —— Empty state (no badge connected) —— */
+.warn-banner {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgb(255 184 77 / 45%);
+  background: rgb(255 184 77 / 8%);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 0.83rem;
+  line-height: 1.4;
+}
+
+.warn-banner strong {
+  color: var(--amber);
+}
+
 .empty-state {
   background: var(--panel);
   border: 1px dashed var(--line);
