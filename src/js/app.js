@@ -316,8 +316,18 @@ async function rebuildPreview() {
     return;
   }
   try {
+    // Learn the dial algorithm before encoding: algorithm 4 requires JPEG 4:4:4,
+    // everything else uses RGB565. Probed lazily (it can drop some BJ-1 units).
+    let snap = client.getSnapshot();
+    if (snap.protocolMode === 'fitpro' && snap.dialAlgorithm == null && client.connected) {
+      try {
+        await client.refreshDialInfo({ timeoutMs: 4000 });
+        snap = client.getSnapshot();
+      } catch (e) {
+        log({ msg: `Dial info unavailable (${e.message}) — assuming RGB565 dial`, level: 'warn' });
+      }
+    }
     // BJ/DG FitPro: RGB565 dial type 0. Baji / algorithm-4 JPEG only when needed.
-    const snap = client.getSnapshot();
     const useJpeg = snap.protocolMode === 'baji' || snap.dialAlgorithm === 4;
     prepared = await prepareFileForBadge(file, {
       width: Number($('#dialW').value) || DEFAULT_DIAL.width,
