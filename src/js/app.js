@@ -24,6 +24,17 @@ function setPill(el, text, state = '') {
   else delete el.dataset.state;
 }
 
+function syncProtocolUi() {
+  // Baji-only controls are dead weight (and confusing) on a FitPro dial badge.
+  const isFitPro = client.getSnapshot?.().protocolMode === 'fitpro';
+  const mediaSection = $('#mediaLibrarySection');
+  if (mediaSection) mediaSection.hidden = isFitPro;
+  for (const sel of ['#functionType', '#allocMedia']) {
+    const field = $(sel)?.closest('label');
+    if (field) field.hidden = isFitPro;
+  }
+}
+
 function syncConnectionChrome() {
   const n = client.sessionCount;
   const on = n > 0 && client.connected;
@@ -52,6 +63,7 @@ function syncConnectionChrome() {
   $('#deviceRail').hidden = n === 0;
   $('#deviceCount').textContent = String(n);
   updatePushChecklist();
+  syncProtocolUi();
 }
 
 function renderDeviceChips() {
@@ -193,6 +205,8 @@ function renderSnapshot(snap) {
   } else if (!s.connected) {
     $('#mediaIdPill').textContent = 'Media ID —';
   }
+
+  syncProtocolUi();
 }
 
 function updatePushChecklist() {
