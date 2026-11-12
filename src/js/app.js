@@ -688,9 +688,10 @@ async function downloadPath() {
   try {
     const { data } = await client.rcspDownloadPath(path);
     const name = path.replace(/^\/+/, '').replace(/[^\w.-]+/g, '_') || 'file.bin';
+    const head = [...data.slice(0, 16)].map((b) => b.toString(16).padStart(2, '0')).join(' ');
+    log({ msg: `RCSP read ${path} → ${data.length} B, head=${head || '(empty)'}`, level: 'ok' });
     saveBlob(data, name);
     toast(`Downloaded ${path} (${data.length} B)`, 'ok');
-    log({ msg: `RCSP read ${path} → ${data.length} B`, level: 'ok' });
   } catch (e) {
     toast(e.message, 'err');
     log({ msg: `RCSP read ${path}: ${e.message}`, level: 'err' });

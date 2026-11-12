@@ -603,18 +603,54 @@ export class RcspSession {
     return all;
   }
 
-  /** List files (type 1) and folders (type 0) across all storage devices. */
-  async listFiles({ readNum = 255, path = [0] } = {}) {
+  /**
+   * List files across storage devices, auto-probing the plausible browse
+   * parameter variants (the SDK and the official capture disagree on pathLen
+   * endianness, and path [0] vs [] is ambiguous). Returns the first non-empty
+   * result and logs which variant worked.
+   */
+  async listFiles({ readNum = 255 } = {}) {
     let handles = null;
     try {
       const storages = await this.listStorage();
       handles = storages.filter((s) => s.online && s.handle != null).map((s) => s.handle);
     } catch {
-      /* fall back inside browseAll */
+      /* fall back below */
     }
-    const files = await this.browseAll({ type: 1, readNum, path, handles });
-    const folders = await this.browseAll({ type: 0, readNum, path, handles });
-    return [...folders, ...files];
+    if (!handles || !handles.length) handles = [DeviceHandler.FLASH];
+
+    const variants = [
+      { path: [0], pathLenLittle: false },
+      { path: [0], pathLenLittle: true },
+      { path: [], pathLenLittle: false },
+      { path: [], pathLenLittle: true },
+    ];
+    for (const handle of handles) {
+      for (const type of [0, 1]) {
+        for (const v of variants) {
+          try {
+            const entries = await this.browse({
+              devHandler: handle,
+              type,
+              readNum,
+              path: v.path,
+              pathLenLittle: v.pathLenLittle,
+            });
+            if (entries.length) {
+              this.onLog(
+                `RCSP browse hit — handle=${handle} type=${type} path=[${v.path}] pathLen=${v.pathLenLittle ? 'LE' : 'BE'} → ${entries.length} entries`,
+                'ok',
+              );
+              return entries;
+            }
+          } catch (e) {
+            this.onLog(`RCSP browse handle=${handle} type=${type}: ${e.message}`, 'warn');
+          }
+        }
+      }
+    }
+    this.onLog('RCSP browse: no variant returned entries', 'warn');
+    return [];
   }
 
   // ── File read (small-file op) ────────────────────────────────────────────
