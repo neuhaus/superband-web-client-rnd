@@ -33,6 +33,8 @@ import {
   buildDialRemainSpaceRequest,
   parseDialRemainSpace,
   buildDialListRequest,
+  buildDialPresetListRequest,
+  buildDialDetailsRequest,
   buildDialDelete,
   buildDialSwitch,
   describeDialList,
@@ -585,6 +587,23 @@ class BadgeSession {
     const payload = pkt.payload || new Uint8Array();
     const raw = toHex(payload);
     this._log(`Dial list ← ${raw}`, 'info');
+    return { raw, payload, summary: describeDialList(payload) };
+  }
+
+  /** Preset/factory dial list (module 0x20 / key 5). Returns the raw payload. */
+  async dialPresetList({ timeoutMs = 4000 } = {}) {
+    if (!this.connected) throw new Error('Not connected');
+    const pending = this._waitFor(
+      (p) =>
+        (p.moduleId === FitPro.DIAL_INFO_MODULE || p.moduleKey === FitPro.DIAL_INFO_MODULE) &&
+        (p.commandId === 5 || p.command === 5),
+      { timeoutMs, label: 'DIAL_PRESET_LIST' },
+    );
+    await this.write(buildDialPresetListRequest(), 'DIAL_PRESET_LIST');
+    const pkt = await pending;
+    const payload = pkt.payload || new Uint8Array();
+    const raw = toHex(payload);
+    this._log(`Dial preset list ← ${raw}`, 'info');
     return { raw, payload, summary: describeDialList(payload) };
   }
 
@@ -1245,6 +1264,10 @@ export class SuperBandClient extends EventTarget {
 
   async dialList(opts) {
     return this._requireActive().dialList(opts);
+  }
+
+  async dialPresetList(opts) {
+    return this._requireActive().dialPresetList(opts);
   }
 
   async dialDelete(dialId, opts) {

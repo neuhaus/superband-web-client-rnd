@@ -181,6 +181,18 @@ export function buildDialListRequest() {
   return buildFitProFrame(FitPro.DIAL_INFO_MODULE, 3);
 }
 
+/** Preset/factory dial list: module `0x20` / key `5`. */
+export function buildDialPresetListRequest() {
+  return buildFitProFrame(FitPro.DIAL_INFO_MODULE, 5);
+}
+
+/** Dial details for one id: module `0x20` / key `7`, `u32BE(id)`. */
+export function buildDialDetailsRequest(dialId) {
+  const p = new Uint8Array(4);
+  putU32BE(p, 0, Number(dialId) >>> 0);
+  return buildFitProFrame(FitPro.DIAL_INFO_MODULE, 7, p);
+}
+
 /** Delete a stored face/video by dial id: module `0x1F` / cmd `4`, `u32BE(id)`. */
 export function buildDialDelete(dialId) {
   const p = new Uint8Array(4);

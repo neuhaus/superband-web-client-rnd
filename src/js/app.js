@@ -520,6 +520,23 @@ async function listDials() {
   }
 }
 
+async function listPresetDials() {
+  if (!client.connected) {
+    toast('Connect a badge first', 'err');
+    return;
+  }
+  const out = $('#dialListOut');
+  try {
+    const { raw, payload, summary } = await client.dialPresetList();
+    out.hidden = false;
+    out.textContent = `dial preset list (0x20/5) — ${payload.length} B\n${summary}`;
+    log({ msg: `Dial preset list ← ${raw}`, level: 'info' });
+  } catch (e) {
+    toast(e.message, 'err');
+    log({ msg: `Dial preset list: ${e.message}`, level: 'err' });
+  }
+}
+
 async function deleteDial() {
   const id = Number($('#dialDeleteId').value);
   if (!Number.isFinite(id) || id < 0) {
@@ -706,6 +723,7 @@ function bind() {
   $('#btnPushVideo').addEventListener('click', () => pushVideo());
   $('#btnVideoFreeSpace').addEventListener('click', () => queryVideoFreeSpace());
   $('#btnDialList').addEventListener('click', () => listDials());
+  $('#btnDialPresetList').addEventListener('click', () => listPresetDials());
   $('#btnDialDelete').addEventListener('click', () => deleteDial());
   $('#btnDialSwitch').addEventListener('click', () => switchDial());
   $('#btnMediaList').addEventListener('click', () =>
