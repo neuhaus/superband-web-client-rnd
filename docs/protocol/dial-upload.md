@@ -8,7 +8,7 @@ Sending Baji `MEDIA_*` or `FILE_TRANSFER` frames to these devices often times ou
 
 | Probe | BJ-1 / FitPro-only | Baji badge |
 |-------|--------------------|------------|
-| GAP name `BJ*` / `DG*` / `*BadgeOK*` | treat as FitPro immediately | — |
+| GAP name `BJ*` / `DG*` / `BG*` / `*BadgeOK*` | treat as FitPro immediately | — |
 | Legacy pair `CD … 12 01 0A …` | `0xDC` ack | often `0xDC` too |
 | Legacy `0x1A` D(10)/D(12)/D(28) | best-effort handshake | same |
 | Baji `DEVICE_INFO_REQUEST` | **skip** on BJ/DG (timeout only) | `DEVICE_INFO_RESPONSE` |
@@ -97,6 +97,8 @@ The Android app pushes video/GIF as a **looping MJPG AVI** through the *same* di
 | Sequence | identical `start(2) → data(1) → finish(3)` (chunk ACK flow unchanged) |
 
 Container is a standard **RIFF/AVI**, `vids`/`MJPG`: an `avih` main header, `strl` (`strh` handler `MJPG` + `strf` BITMAPINFOHEADER), a `movi` list of `00dc` chunks (one raw JPEG each), and an `idx1` index. `src/js/avi.js` builds it from decoded frames; `src/js/video.js` decodes GIF/WebP/APNG (`ImageDecoder`) and video (`<video>` + canvas) into JPEG frames.
+
+The badge CPU is a **JieLi AC7076** ("7076 low power") — the same e-badge class as `samascience/ebadge` (BW03 / AC7076A) and the E01 units, whose firmware accepts **baseline JFIF stills or MJPEG-in-AVI**. That corroborates the container choice; playback of an AVI dial on this specific unit is still the unverified step.
 
 Whether the badge firmware *plays* an AVI dial is the open question: the protocol slots and the app code path exist, but it has not yet been confirmed on hardware.
 
