@@ -124,27 +124,34 @@ export class RcspSession {
 
   _handle(chunk) {
     this.buf = concat(this.buf, chunk);
-    while (this.buf.length >= 7) {
+    while (this.buf.length >= 8) {
       // resync on the FE DC BA prefix
       if (this.buf[0] !== 0xfe || this.buf[1] !== 0xdc || this.buf[2] !== 0xba) {
-        const i = this.buf.findIndex((_, k) => this.buf[k] === 0xfe && this.buf[k + 1] === 0xdc);
+        let i = -1;
+        for (let k = 1; k + 1 < this.buf.length; k++) {
+          if (this.buf[k] === 0xfe && this.buf[k + 1] === 0xdc) {
+            i = k;
+            break;
+          }
+        }
         if (i < 0) {
           this.buf = new Uint8Array(0);
           return;
         }
         this.buf = this.buf.slice(i);
-        if (this.buf.length < 7) return;
+        if (this.buf.length < 8) return;
       }
-      const len = this.buf[3] | (this.buf[4] << 8);
-      const total = 5 + len + 1;
+      // paramLen is u16 big-endian at offset 5; total = 3 prefix + 4 header + paramLen + 1 end
+      const paramLen = (this.buf[5] << 8) | this.buf[6];
+      const total = paramLen + 8;
       if (this.buf.length < total) return;
       const frame = this.buf.slice(0, total);
       this.buf = this.buf.slice(total);
       try {
         const pkt = parseRcspFrame(frame);
         this.onLog(
-          `← RCSP sn=${pkt.sn} op=0x${pkt.opcode.toString(16)} status=0x${(pkt.status ?? 0).toString(16)} ` +
-            `payload=${toHex(pkt.payload)}`,
+          `← RCSP type=${pkt.type} sn=${pkt.sn} op=0x${pkt.opcode.toString(16)} ` +
+            `status=0x${(pkt.status ?? 0).toString(16)} payload=${toHex(pkt.payload)}`,
           'info',
         );
         const r = this.pending.shift();
@@ -187,7 +194,8 @@ export class RcspSession {
   }
 
   getTargetInfo(opts) {
-    return this.send(RcspCmd.GET_TARGET_INFO, undefined, opts);
+    // SDK sends GetTargetInfoParam(-1) → mask FFFFFFFF, platform 0.
+    return this.send(RcspCmd.GET_TARGET_INFO, new Uint8Array([0xff, 0xff, 0xff, 0xff, 0x00]), opts);
   }
 
   externalFlash(param, opts) {

@@ -42,31 +42,59 @@ function readU16LE(buf, o = 0) {
   return buf[o] | (buf[o + 1] << 8);
 }
 
-export function buildRcspFrame(opcode, payload, sn) {
+/**
+ * Build a JieLi RCSP packet, mirroring the SDK's ParseHelper.packSendBasePacket:
+ *
+ *   FE DC BA | flags | opCode | paramLen(u16 BE) | body | EF
+ *
+ *   flags    = type<<7 | hasResponse<<6   (type 1 = command, 0 = response)
+ *   body     = sn(1) | [xmOpCode(1) if opCode==1] | paramData          (command)
+ *   body     = status(1) | sn(1) | [xmOpCode(1)] | paramData           (response)
+ *   paramLen = body.length
+ *
+ * @param {number} opcode
+ * @param {Uint8Array|number[]} payload paramData
+ * @param {number} sn
+ * @param {{ type?:number, hasResponse?:number, status?:number, xmOpCode?:number }} [opts]
+ */
+export function buildRcspFrame(opcode, payload, sn, opts = {}) {
+  const { type = 1, hasResponse = 1, status = 0, xmOpCode = null } = opts;
   const pl = payload instanceof Uint8Array ? payload : new Uint8Array(payload || 0);
-  const inner = new Uint8Array(2 + pl.length);
-  inner[0] = sn & 0xff;
-  inner[1] = opcode & 0xff;
-  inner.set(pl, 2);
-  const out = new Uint8Array(3 + 2 + inner.length + 1);
+  const body = [];
+  if (type === 0) body.push(status & 0xff);
+  body.push(sn & 0xff);
+  if (opcode === 1 && xmOpCode != null) body.push(xmOpCode & 0xff);
+  for (const b of pl) body.push(b & 0xff);
+  const paramLen = body.length;
+  const out = new Uint8Array(8 + paramLen);
   out.set(PREFIX, 0);
-  out[3] = inner.length & 0xff;
-  out[4] = (inner.length >> 8) & 0xff;
-  out.set(inner, 5);
-  out[5 + inner.length] = END;
+  out[3] = ((type === 1 ? 0x80 : 0) | (hasResponse === 1 ? 0x40 : 0)) & 0xff;
+  out[4] = opcode & 0xff;
+  out[5] = (paramLen >> 8) & 0xff;
+  out[6] = paramLen & 0xff;
+  out.set(body, 7);
+  out[7 + paramLen] = END;
   return out;
 }
 
 export function parseRcspFrame(buf) {
-  if (buf.length < 7) throw new Error('RCSP frame too short');
+  if (buf.length < 8) throw new Error('RCSP frame too short');
   if (buf[0] !== 0xfe || buf[1] !== 0xdc || buf[2] !== 0xba) {
     throw new Error('Bad RCSP prefix');
   }
-  const length = buf[3] | (buf[4] << 8);
-  if (buf.length < 5 + length + 1) throw new Error('RCSP incomplete');
-  if (buf[5 + length] !== END) throw new Error('Bad RCSP end');
-  const body = buf.slice(5, 5 + length);
-  return { sn: body[0], opcode: body[1], status: body[2], payload: body.slice(3) };
+  const flags = buf[3];
+  const type = (flags >> 7) & 1;
+  const hasResponse = (flags >> 6) & 1;
+  const opcode = buf[4];
+  const paramLen = (buf[5] << 8) | buf[6];
+  if (buf.length < paramLen + 8) throw new Error('RCSP incomplete');
+  if (buf[paramLen + 7] !== END) throw new Error('Bad RCSP end');
+  const body = buf.slice(7, 7 + paramLen);
+  let o = 0;
+  const status = type === 0 ? body[o++] : 0;
+  const sn = body.length > o ? body[o++] : 0;
+  if (opcode === 1) o += 1; // xmOpCode
+  return { type, hasResponse, sn, opcode, status, payload: body.slice(o) };
 }
 
 /**
